@@ -523,6 +523,7 @@ function CanvasZoomRenderer({
   cacheRevision,
   cameraOverride,
   renderBuffers,
+  opaque,
 }: {
   depth: number;
   transitions: TransitionSettings[];
@@ -531,6 +532,7 @@ function CanvasZoomRenderer({
   cacheRevision: number;
   cameraOverride?: { x: number; y: number; viewScale: number };
   renderBuffers?: Array<{ anchorLevel: number; opacity: number }>;
+  opaque: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layerCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -559,7 +561,7 @@ function CanvasZoomRenderer({
       maskCanvas.height = renderHeight;
     }
 
-    const context = canvas.getContext("2d", { alpha: true });
+    const context = canvas.getContext("2d", { alpha: !opaque });
     const layerContext = layerCanvas.getContext("2d");
     const maskContext = maskCanvas.getContext("2d");
     if (!context || !layerContext || !maskContext) return;
@@ -709,7 +711,7 @@ function CanvasZoomRenderer({
 
     for (const buffer of buffers) renderBuffer(buffer.anchorLevel, buffer.opacity);
     context.globalAlpha = 1;
-  }, [cacheRevision, cameraOverride, depth, hidden, renderBuffers, transitions, viewport]);
+  }, [cacheRevision, cameraOverride, depth, hidden, opaque, renderBuffers, transitions, viewport]);
 
   return (
     <canvas
@@ -1585,11 +1587,13 @@ export default function Home() {
             draggable="false" style={manualBaseImageStyle} />
         ) : null}
         <CanvasZoomRenderer
+          key={experienceMode}
           depth={depth}
           transitions={transitions}
           viewport={viewport}
           hidden={developerMode}
           cacheRevision={imageCacheRevision}
+          opaque={experienceMode === "guided"}
           cameraOverride={experienceMode === "manual"
             ? { x: manualCamera.x, y: manualCamera.y, viewScale: manualBaseViewScale }
             : undefined}

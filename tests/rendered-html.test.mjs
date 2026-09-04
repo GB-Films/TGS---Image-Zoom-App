@@ -63,6 +63,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /Zoom guiado/);
   assert.match(page, /cameraOverride/);
   assert.match(page, /renderBuffers/);
+  assert.match(page, /alpha: !opaque/);
+  assert.match(page, /opaque=\{experienceMode === "guided"\}/);
   assert.match(page, /opacity <= 0\.01/);
   assert.match(page, /bufferAnchor \+ 2/);
   assert.match(page, /bufferAnchor \+ 3/);
