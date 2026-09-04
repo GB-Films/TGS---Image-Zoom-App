@@ -1465,12 +1465,14 @@ export default function Home() {
   };
 
   const level = Math.min(Math.floor(depth), MAX_DEPTH);
-  // Keep one completed transition behind the camera until its hard mask edge
-  // is outside the viewport, while resetting here avoids huge GPU transforms.
-  const anchorLevel = Math.max(
-    0,
-    Math.floor(Math.max(0, depth - REBASE_DELAY)) - 1,
-  );
+  // Guided zoom promotes every completed image to an opaque base immediately.
+  // Manual zoom keeps the delayed rebase that stabilizes free camera movement.
+  const anchorLevel = experienceMode === "guided"
+    ? level
+    : Math.max(
+        0,
+        Math.floor(Math.max(0, depth - REBASE_DELAY)) - 1,
+      );
   const nextLevel = Math.min(level + 1, MAX_DEPTH);
   const levelProgress = nextLevel === level ? 0 : depth - level;
   const activeCamera = calculateCameraForAnchor(
@@ -1481,12 +1483,13 @@ export default function Home() {
     levelProgress,
   );
   const warmAnchorLevel =
+    experienceMode === "manual" &&
     depth >= anchorLevel + 2 + REBASE_DELAY - PREWARM_LEAD &&
     anchorLevel < MAX_DEPTH - 1
       ? anchorLevel + 1
       : null;
   const rebaseBlendStart = anchorLevel + 1 + REBASE_DELAY;
-  const rebaseBlend = anchorLevel === 0
+  const rebaseBlend = experienceMode === "guided" || anchorLevel === 0
     ? 1
     : clamp((depth - rebaseBlendStart) / REBASE_BLEND_DEPTH, 0, 1);
   const previousAnchorLevel = anchorLevel > 0 && rebaseBlend < 1

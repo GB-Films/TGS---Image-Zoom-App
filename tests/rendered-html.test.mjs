@@ -93,6 +93,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /REBASE_DELAY = 0\.18/);
   assert.match(page, /PREWARM_LEAD = 0\.65/);
   assert.match(page, /REBASE_BLEND_DEPTH = 0\.12/);
+  assert.match(page, /experienceMode === "guided"\s*\? level/);
+  assert.match(page, /Guided zoom promotes every completed image to an opaque base/);
   assert.match(page, /pendingDepthRef/);
   assert.match(page, /depthFrameRef/);
   assert.match(page, /bufferAnchors\.map/);
