@@ -413,40 +413,17 @@ const calculateCameraForAnchor = (
   return { placements, currentPlacement, cameraX, cameraY, viewScale };
 };
 
-const calculateCameraAtDepth = (transitions: TransitionSettings[], depth: number) => {
+const calculateCanonicalCameraAtDepth = (transitions: TransitionSettings[], depth: number) => {
   const level = Math.min(Math.floor(depth), MAX_DEPTH);
-  const anchorLevel = Math.max(
-    0,
-    Math.floor(Math.max(0, depth - REBASE_DELAY)) - 1,
-  );
   const nextLevel = Math.min(level + 1, MAX_DEPTH);
   const levelProgress = nextLevel === level ? 0 : depth - level;
-  const activeCamera = calculateCameraForAnchor(
+  return calculateCameraForAnchor(
     transitions,
-    anchorLevel,
+    0,
     level,
     nextLevel,
     levelProgress,
   );
-  const rebaseBlendStart = anchorLevel + 1 + REBASE_DELAY;
-  const rebaseBlend = anchorLevel === 0
-    ? 1
-    : clamp((depth - rebaseBlendStart) / REBASE_BLEND_DEPTH, 0, 1);
-  if (anchorLevel > 0 && rebaseBlend < 1) {
-    const previousCamera = calculateCameraForAnchor(
-      transitions,
-      anchorLevel - 1,
-      level,
-      nextLevel,
-      levelProgress,
-    );
-    return {
-      ...activeCamera,
-      viewScale: previousCamera.viewScale +
-        (activeCamera.viewScale - previousCamera.viewScale) * rebaseBlend,
-    };
-  }
-  return activeCamera;
 };
 
 const blurMaskAlpha = (
@@ -552,7 +529,7 @@ function CanvasZoomRenderer({
   viewport: { width: number; height: number };
   hidden: boolean;
   cacheRevision: number;
-  cameraOverride?: { x: number; y: number };
+  cameraOverride?: { x: number; y: number; viewScale: number };
   renderBuffers?: Array<{ anchorLevel: number; opacity: number }>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -582,7 +559,7 @@ function CanvasZoomRenderer({
       maskCanvas.height = renderHeight;
     }
 
-    const context = canvas.getContext("2d", { alpha: false });
+    const context = canvas.getContext("2d", { alpha: true });
     const layerContext = layerCanvas.getContext("2d");
     const maskContext = maskCanvas.getContext("2d");
     if (!context || !layerContext || !maskContext) return;
@@ -598,8 +575,11 @@ function CanvasZoomRenderer({
     const artworkHeight = artworkWidth / ARTWORK_ASPECT_RATIO;
 
     context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = "#001827";
-    context.fillRect(0, 0, renderWidth, renderHeight);
+    context.clearRect(0, 0, renderWidth, renderHeight);
+    if (!cameraOverride) {
+      context.fillStyle = "#001827";
+      context.fillRect(0, 0, renderWidth, renderHeight);
+    }
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
 
@@ -616,7 +596,20 @@ function CanvasZoomRenderer({
         levelProgress,
       );
       const camera = cameraOverride
-        ? { ...calculatedCamera, cameraX: cameraOverride.x, cameraY: cameraOverride.y }
+        ? (() => {
+            const framePlacement = calculatedCamera.placements[0] ?? {
+              centerX: 0.5,
+              centerY: 0.5,
+              scale: 1,
+            };
+            const frameScale = Math.max(framePlacement.scale, 0.000001);
+            return {
+              ...calculatedCamera,
+              cameraX: framePlacement.centerX + frameScale * (cameraOverride.x - 0.5),
+              cameraY: framePlacement.centerY + frameScale * (cameraOverride.y - 0.5),
+              viewScale: cameraOverride.viewScale / frameScale,
+            };
+          })()
         : calculatedCamera;
       const toScreenX = (coordinate: number) =>
         (viewport.width / 2 +
@@ -627,8 +620,20 @@ function CanvasZoomRenderer({
 
       context.globalCompositeOperation = "source-over";
       context.globalAlpha = opacity;
-      const lastLayer = Math.min(MAX_DEPTH, bufferAnchor + 3);
-      for (let layer = bufferAnchor; layer <= lastLayer; layer += 1) {
+      const layersToRender = cameraOverride
+        ? [...new Set([
+            Math.max(1, bufferAnchor),
+            Math.max(1, level - 1),
+            Math.max(1, level),
+            Math.max(1, nextLevel),
+          ])]
+          .filter((layer) => layer <= MAX_DEPTH)
+          .sort((first, second) => first - second)
+        : Array.from(
+            { length: Math.min(MAX_DEPTH, bufferAnchor + 3) - bufferAnchor + 1 },
+            (_value, index) => bufferAnchor + index,
+          );
+      for (const layer of layersToRender) {
         const placement = camera.placements[layer];
         const image = DECODED_IMAGE_CACHE.get(SCENES[ZOOM_SEQUENCE[layer]].src);
         if (!placement || !image || !isDecodedSceneReady(image)) continue;
@@ -1013,6 +1018,7 @@ export default function Home() {
   const preloadLevel = Math.floor(depth);
   const canvasWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
   const canvasHeight = canvasWidth / ARTWORK_ASPECT_RATIO;
+  const manualBaseViewScale = calculateCanonicalCameraAtDepth(transitions, depth).viewScale;
 
   const setWelcomeParallax = useCallback((x: number, y: number) => {
     const scene = welcomeRef.current;
@@ -1099,6 +1105,9 @@ export default function Home() {
       ZOOM_SEQUENCE.slice(firstLevel, lastLevel + 1)
         .map((sceneIndex) => SCENES[sceneIndex].src),
     );
+    if (experienceMode === "manual") {
+      desiredSources.add(SCENES[ZOOM_SEQUENCE[0]].src);
+    }
     ACTIVE_IMAGE_SOURCES.clear();
     desiredSources.forEach((src) => ACTIVE_IMAGE_SOURCES.add(src));
     releaseScenesOutside(desiredSources);
@@ -1126,7 +1135,7 @@ export default function Home() {
       cancelled = true;
       window.clearTimeout(preloadTimer);
     };
-  }, [preloadLevel]);
+  }, [experienceMode, preloadLevel]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1227,7 +1236,7 @@ export default function Home() {
     commitDepth(Math.min(index + 0.45, MAX_DEPTH));
   }, [commitDepth]);
 
-  const setManualCameraPosition = useCallback((x: number, y: number, viewScale = 1) => {
+  const setManualCameraPosition = useCallback((x: number, y: number, viewScale = manualBaseViewScale) => {
     const safeScale = Math.max(viewScale, 0.001);
     const horizontalReach = clamp(viewport.width / (2 * canvasWidth * safeScale), 0, 0.5);
     const verticalReach = clamp(viewport.height / (2 * canvasHeight * safeScale), 0, 0.5);
@@ -1237,7 +1246,7 @@ export default function Home() {
     };
     manualCameraRef.current = nextCamera;
     setManualCamera(nextCamera);
-  }, [canvasHeight, canvasWidth, viewport]);
+  }, [canvasHeight, canvasWidth, manualBaseViewScale, viewport]);
 
   const resetManualCamera = useCallback(() => {
     setManualCameraPosition(0.5, 0.5, 1);
@@ -1306,7 +1315,7 @@ export default function Home() {
         depth: depthRef.current,
         cameraX: manualCameraRef.current.x,
         cameraY: manualCameraRef.current.y,
-        viewScale: calculatedViewScale,
+        viewScale: manualBaseViewScale,
         focusX: focus.x,
         focusY: focus.y,
       };
@@ -1321,7 +1330,7 @@ export default function Home() {
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointersRef.current.size < 2) {
       if (experienceMode !== "manual" || !panOriginRef.current) return;
-      const parentScreenScale = Math.max(calculatedViewScale, 0.001);
+      const parentScreenScale = Math.max(manualBaseViewScale, 0.001);
       setManualCameraPosition(
         panOriginRef.current.cameraX - (event.clientX - panOriginRef.current.x) / (canvasWidth * parentScreenScale),
         panOriginRef.current.cameraY - (event.clientY - panOriginRef.current.y) / (canvasHeight * parentScreenScale),
@@ -1339,7 +1348,7 @@ export default function Home() {
         x: (positions[0].x + positions[1].x) / 2,
         y: (positions[0].y + positions[1].y) / 2,
       };
-      const nextViewScale = calculateCameraAtDepth(transitions, nextDepth).viewScale;
+      const nextViewScale = calculateCanonicalCameraAtDepth(transitions, nextDepth).viewScale;
       const focusX = (gestureOriginRef.current.focusX - viewport.width / 2) / canvasWidth;
       const focusY = (gestureOriginRef.current.focusY - viewport.height / 2) / canvasHeight;
       const nextFocusX = (focus.x - viewport.width / 2) / canvasWidth;
@@ -1364,8 +1373,8 @@ export default function Home() {
     setHasInteracted(true);
     const nextDepth = clamp(depthRef.current - event.deltaY * 0.0018, 0, MAX_DEPTH);
     if (experienceMode === "manual") {
-      const currentViewScale = calculatedViewScale;
-      const nextViewScale = calculateCameraAtDepth(transitions, nextDepth).viewScale;
+      const currentViewScale = manualBaseViewScale;
+      const nextViewScale = calculateCanonicalCameraAtDepth(transitions, nextDepth).viewScale;
       const focusX = (event.clientX - viewport.width / 2) / canvasWidth;
       const focusY = (event.clientY - viewport.height / 2) / canvasHeight;
       setManualCameraPosition(
@@ -1381,10 +1390,10 @@ export default function Home() {
     if (experienceMode === "manual" && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       event.preventDefault();
       setHasInteracted(true);
-      const step = 0.08 / Math.max(calculatedViewScale, 0.001);
+      const step = 0.08 / Math.max(manualBaseViewScale, 0.001);
       const horizontal = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
       const vertical = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-      setManualCameraPosition(manualCameraRef.current.x + horizontal, manualCameraRef.current.y + vertical, calculatedViewScale);
+      setManualCameraPosition(manualCameraRef.current.x + horizontal, manualCameraRef.current.y + vertical, manualBaseViewScale);
       return;
     }
     if (["+", "=", "ArrowUp"].includes(event.key)) {
@@ -1442,10 +1451,17 @@ export default function Home() {
         : 0.001;
     return { anchorLevel: bufferAnchor, opacity };
   });
-  const cameraX = experienceMode === "manual" ? manualCamera.x : activeCamera.cameraX;
-  const cameraY = experienceMode === "manual" ? manualCamera.y : activeCamera.cameraY;
+  const manualFramePlacement = activeCamera.placements[0] ?? { centerX: 0.5, centerY: 0.5, scale: 1 };
+  const manualFrameScale = Math.max(manualFramePlacement.scale, 0.000001);
+  const manualLocalCameraX =
+    manualFramePlacement.centerX + manualFrameScale * (manualCamera.x - 0.5);
+  const manualLocalCameraY =
+    manualFramePlacement.centerY + manualFrameScale * (manualCamera.y - 0.5);
+  const manualLocalViewScale = manualBaseViewScale / manualFrameScale;
+  const cameraX = experienceMode === "manual" ? manualLocalCameraX : activeCamera.cameraX;
+  const cameraY = experienceMode === "manual" ? manualLocalCameraY : activeCamera.cameraY;
   const calculatedViewScale = experienceMode === "manual"
-    ? calculateCameraAtDepth(transitions, depth).viewScale
+    ? manualLocalViewScale
     : activeCamera.viewScale;
   const displayCameraX = maskIsDragging && cameraLock
     ? cameraLock.x
@@ -1456,6 +1472,11 @@ export default function Home() {
   const viewScale = maskIsDragging && cameraLock
     ? cameraLock.scale
     : calculatedViewScale;
+  const manualBaseImageStyle: CSSProperties = {
+    width: canvasWidth,
+    height: canvasHeight,
+    transform: `translate3d(calc(-50% + ${(0.5 - manualCamera.x) * canvasWidth * manualBaseViewScale}px), calc(-50% + ${(0.5 - manualCamera.y) * canvasHeight * manualBaseViewScale}px), 0) scale(${manualBaseViewScale})`,
+  };
   const panelWidth = Math.min(360, viewport.width * 0.42);
   const editorOffsetX = developerMode && workspaceShifted && viewport.width >= 680
     ? -(panelWidth / 2 + 12)
@@ -1554,6 +1575,11 @@ export default function Home() {
         onPointerDown={handleZoomPointerDown} onPointerMove={handleZoomPointerMove}
         onPointerUp={handleZoomPointerEnd} onPointerCancel={handleZoomPointerEnd}
         onWheel={handleWheel} onKeyDown={handleZoomKeyDown}>
+        {experienceMode === "manual" ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img className="manual-base-image" src={SCENES[0].src} alt="" aria-hidden="true"
+            draggable="false" style={manualBaseImageStyle} />
+        ) : null}
         <CanvasZoomRenderer
           depth={depth}
           transitions={transitions}
@@ -1561,9 +1587,11 @@ export default function Home() {
           hidden={developerMode}
           cacheRevision={imageCacheRevision}
           cameraOverride={experienceMode === "manual"
-            ? { x: displayCameraX, y: displayCameraY }
+            ? { x: manualCamera.x, y: manualCamera.y, viewScale: manualBaseViewScale }
             : undefined}
-          renderBuffers={canvasRenderBuffers}
+          renderBuffers={experienceMode === "manual"
+            ? [{ anchorLevel, opacity: 1 }]
+            : canvasRenderBuffers}
         />
         {developerMode ? bufferAnchors.map((bufferAnchor) => {
           const isActiveBuffer = bufferAnchor === anchorLevel;

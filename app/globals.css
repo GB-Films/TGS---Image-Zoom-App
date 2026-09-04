@@ -465,6 +465,18 @@ button {
   -webkit-user-drag: none;
 }
 
+.manual-base-image {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  display: block;
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  will-change: transform;
+  -webkit-user-drag: none;
+}
+
 .zoom-world {
   position: absolute;
   inset: 0;
