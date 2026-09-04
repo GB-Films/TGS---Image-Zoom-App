@@ -36,6 +36,11 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Flatten project-site assets
+        run: |
+          cp -R dist/client/TGS---Image-Zoom-App/_next dist/client/_next
+          rm -rf dist/client/TGS---Image-Zoom-App
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
