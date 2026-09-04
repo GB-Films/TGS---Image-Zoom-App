@@ -73,6 +73,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /bufferAnchor \+ 3/);
   assert.match(page, /preloadLevel \+ 2/);
   assert.match(page, /preloadLevel \+ 3/);
+  assert.match(page, /level <= preloadLevel \+ 1/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);

@@ -1161,7 +1161,11 @@ export default function Home() {
         if (DECODED_IMAGE_CACHE.has(src)) continue;
         const decoded = await loadDecodedScene(src);
         if (cancelled) return;
-        if (decoded) setImageCacheRevision((revision) => revision + 1);
+        // Future layers enter the next normal depth render; forcing a standalone
+        // canvas refresh at decode completion can expose a transient composite.
+        if (decoded && level <= preloadLevel + 1) {
+          setImageCacheRevision((revision) => revision + 1);
+        }
       }
     }, preloadLevel === 0 ? 280 : 32);
     return () => {
