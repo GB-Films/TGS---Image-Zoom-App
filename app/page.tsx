@@ -535,6 +535,7 @@ function CanvasZoomRenderer({
   opaque: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const layerCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -562,9 +563,20 @@ function CanvasZoomRenderer({
     }
 
     const context = canvas.getContext("2d", { alpha: !opaque });
+    let frameCanvas: HTMLCanvasElement | null = null;
+    let renderContext = context;
+    if (opaque) {
+      if (!frameCanvasRef.current) frameCanvasRef.current = document.createElement("canvas");
+      frameCanvas = frameCanvasRef.current;
+      if (frameCanvas.width !== renderWidth || frameCanvas.height !== renderHeight) {
+        frameCanvas.width = renderWidth;
+        frameCanvas.height = renderHeight;
+      }
+      renderContext = frameCanvas.getContext("2d", { alpha: false });
+    }
     const layerContext = layerCanvas.getContext("2d");
     const maskContext = maskCanvas.getContext("2d");
-    if (!context || !layerContext || !maskContext) return;
+    if (!context || !renderContext || !layerContext || !maskContext) return;
 
     const level = Math.min(Math.floor(depth), MAX_DEPTH);
     const nextLevel = Math.min(level + 1, MAX_DEPTH);
@@ -576,11 +588,11 @@ function CanvasZoomRenderer({
     const artworkWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
     const artworkHeight = artworkWidth / ARTWORK_ASPECT_RATIO;
 
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.clearRect(0, 0, renderWidth, renderHeight);
+    renderContext.setTransform(1, 0, 0, 1, 0, 0);
+    renderContext.clearRect(0, 0, renderWidth, renderHeight);
     if (!cameraOverride) {
-      context.fillStyle = "#001827";
-      context.fillRect(0, 0, renderWidth, renderHeight);
+      renderContext.fillStyle = "#001827";
+      renderContext.fillRect(0, 0, renderWidth, renderHeight);
     }
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
@@ -620,8 +632,8 @@ function CanvasZoomRenderer({
         (viewport.height / 2 +
           (coordinate - camera.cameraY) * artworkHeight * camera.viewScale) * pixelRatio;
 
-      context.globalCompositeOperation = "source-over";
-      context.globalAlpha = opacity;
+      renderContext.globalCompositeOperation = "source-over";
+      renderContext.globalAlpha = opacity;
       const layersToRender = cameraOverride
         ? [...new Set([
             Math.max(1, bufferAnchor),
@@ -705,12 +717,19 @@ function CanvasZoomRenderer({
           }
         }
 
-        context.drawImage(layerCanvas, 0, 0);
+        renderContext.drawImage(layerCanvas, 0, 0);
       }
     };
 
     for (const buffer of buffers) renderBuffer(buffer.anchorLevel, buffer.opacity);
-    context.globalAlpha = 1;
+    renderContext.globalAlpha = 1;
+    if (opaque && frameCanvas) {
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.globalCompositeOperation = "copy";
+      context.globalAlpha = 1;
+      context.drawImage(frameCanvas, 0, 0);
+      context.globalCompositeOperation = "source-over";
+    }
   }, [cacheRevision, cameraOverride, depth, hidden, opaque, renderBuffers, transitions, viewport]);
 
   return (
