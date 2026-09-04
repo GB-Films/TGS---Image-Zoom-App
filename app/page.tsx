@@ -623,6 +623,8 @@ function CanvasZoomRenderer({
       const layersToRender = cameraOverride
         ? [...new Set([
             Math.max(1, bufferAnchor),
+            Math.max(1, bufferAnchor + 1),
+            Math.max(1, bufferAnchor + 2),
             Math.max(1, level - 1),
             Math.max(1, level),
             Math.max(1, nextLevel),
@@ -1115,8 +1117,8 @@ export default function Home() {
     const prioritizedLevels = [
       preloadLevel,
       preloadLevel + 1,
-      preloadLevel - 1,
       preloadLevel + 2,
+      preloadLevel - 1,
       preloadLevel - 2,
     ].filter((level, index, levels) =>
       level >= firstLevel && level <= lastLevel && levels.indexOf(level) === index,
