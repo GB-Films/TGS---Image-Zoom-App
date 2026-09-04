@@ -1115,24 +1115,42 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    const startupSequence = experienceMode === "guided"
+      ? ZOOM_SEQUENCE
+      : ZOOM_SEQUENCE.slice(0, STARTUP_DECODE_LEVELS);
     const uniqueSources = [...new Set(
-      ZOOM_SEQUENCE.slice(0, STARTUP_DECODE_LEVELS)
+      startupSequence
         .map((sceneIndex) => SCENES[sceneIndex].src),
     )];
     uniqueSources.forEach((src) => ACTIVE_IMAGE_SOURCES.add(src));
     Promise.all(uniqueSources.map(loadDecodedScene)).then((images) => {
       if (!cancelled && images.every(Boolean)) {
+        if (experienceMode === "guided") {
+          const warmupCanvas = document.createElement("canvas");
+          warmupCanvas.width = 1;
+          warmupCanvas.height = 1;
+          const warmupContext = warmupCanvas.getContext("2d");
+          if (warmupContext) {
+            images.forEach((image) => {
+              if (image) warmupContext.drawImage(image, 0, 0, 1, 1);
+            });
+          }
+        }
         setImageCacheRevision((revision) => revision + 1);
         setAssetsReady(true);
       }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [experienceMode]);
 
   useEffect(() => {
     let cancelled = false;
-    const firstLevel = Math.max(0, preloadLevel - DECODE_BEHIND_LEVELS);
-    const lastLevel = Math.min(MAX_DEPTH, preloadLevel + DECODE_AHEAD_LEVELS);
+    const firstLevel = experienceMode === "guided"
+      ? 0
+      : Math.max(0, preloadLevel - DECODE_BEHIND_LEVELS);
+    const lastLevel = experienceMode === "guided"
+      ? MAX_DEPTH
+      : Math.min(MAX_DEPTH, preloadLevel + DECODE_AHEAD_LEVELS);
     const desiredSources = new Set(
       ZOOM_SEQUENCE.slice(firstLevel, lastLevel + 1)
         .map((sceneIndex) => SCENES[sceneIndex].src),
@@ -1290,6 +1308,7 @@ export default function Home() {
   }, [setManualCameraPosition]);
 
   const selectExperienceMode = (mode: ExperienceMode) => {
+    if (mode !== experienceMode) setAssetsReady(false);
     setExperienceMode(mode);
     resetManualCamera();
   };

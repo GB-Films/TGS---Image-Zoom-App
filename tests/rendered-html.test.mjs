@@ -97,6 +97,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /depthFrameRef/);
   assert.match(page, /bufferAnchors\.map/);
   assert.match(page, /STARTUP_DECODE_LEVELS = 4/);
+  assert.match(page, /experienceMode === "guided"\s*\? ZOOM_SEQUENCE/);
+  assert.match(page, /warmupContext\.drawImage/);
   assert.match(page, /RENDER_AHEAD_LEVELS = 3/);
   assert.match(page, /fetchPriority=/);
   assert.match(page, /interpolateSpline/);
