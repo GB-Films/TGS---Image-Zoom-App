@@ -544,7 +544,9 @@ function CanvasZoomRenderer({
     const canvas = canvasRef.current;
     if (!canvas || hidden || viewport.width <= 0 || viewport.height <= 0) return;
 
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
+    const isMobileManual = Boolean(cameraOverride) && viewport.width < 768;
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, isMobileManual ? 1 : 1.25);
+    const smoothingQuality: ImageSmoothingQuality = isMobileManual ? "medium" : "high";
     const renderWidth = Math.max(1, Math.round(viewport.width * pixelRatio));
     const renderHeight = Math.max(1, Math.round(viewport.height * pixelRatio));
     if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
@@ -603,7 +605,7 @@ function CanvasZoomRenderer({
       renderContext.fillRect(0, 0, renderWidth, renderHeight);
     }
     context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
+    renderContext.imageSmoothingQuality = smoothingQuality;
 
     const buffers = renderBuffers ?? [{ anchorLevel, opacity: 1 }];
     const renderBuffer = (bufferAnchor: number, opacity: number) => {
@@ -668,10 +670,11 @@ function CanvasZoomRenderer({
         layerContext.globalCompositeOperation = "source-over";
         layerContext.globalAlpha = 1;
         layerContext.imageSmoothingEnabled = true;
-        layerContext.imageSmoothingQuality = "high";
+        layerContext.imageSmoothingQuality = smoothingQuality;
 
         const layerWidth = artworkWidth * camera.viewScale * placement.scale * pixelRatio;
         const layerHeight = artworkHeight * camera.viewScale * placement.scale * pixelRatio;
+        if (layerWidth < 1 || layerHeight < 1) continue;
         const layerCenterX = toScreenX(placement.centerX);
         const layerCenterY = toScreenY(placement.centerY);
         layerContext.drawImage(
@@ -1029,6 +1032,8 @@ export default function Home() {
   const depthRef = useRef(0);
   const pendingDepthRef = useRef(0);
   const depthFrameRef = useRef(0);
+  const pendingManualCameraRef = useRef({ x: 0.5, y: 0.5 });
+  const manualCameraDirtyRef = useRef(false);
 
   const [assetsReady, setAssetsReady] = useState(false);
   const [started, setStarted] = useState(false);
@@ -1256,17 +1261,25 @@ export default function Home() {
     return () => window.clearTimeout(saveTimer);
   }, [maskIsDragging, settingsLoaded, transitions]);
 
-  const commitDepth = useCallback((value: number) => {
-    const nextDepth = clamp(value, 0, MAX_DEPTH);
-    depthRef.current = nextDepth;
-    pendingDepthRef.current = nextDepth;
+  const scheduleVisualCommit = useCallback(() => {
     if (!depthFrameRef.current) {
       depthFrameRef.current = window.requestAnimationFrame(() => {
         depthFrameRef.current = 0;
         setDepth(pendingDepthRef.current);
+        if (manualCameraDirtyRef.current) {
+          manualCameraDirtyRef.current = false;
+          setManualCamera(pendingManualCameraRef.current);
+        }
       });
     }
   }, []);
+
+  const commitDepth = useCallback((value: number) => {
+    const nextDepth = clamp(value, 0, MAX_DEPTH);
+    depthRef.current = nextDepth;
+    pendingDepthRef.current = nextDepth;
+    scheduleVisualCommit();
+  }, [scheduleVisualCommit]);
 
   useEffect(() => () => window.cancelAnimationFrame(depthFrameRef.current), []);
 
@@ -1300,8 +1313,10 @@ export default function Home() {
       y: clamp(y, verticalReach, 1 - verticalReach),
     };
     manualCameraRef.current = nextCamera;
-    setManualCamera(nextCamera);
-  }, [canvasHeight, canvasWidth, manualBaseViewScale, viewport]);
+    pendingManualCameraRef.current = nextCamera;
+    manualCameraDirtyRef.current = true;
+    scheduleVisualCommit();
+  }, [canvasHeight, canvasWidth, manualBaseViewScale, scheduleVisualCommit, viewport]);
 
   const resetManualCamera = useCallback(() => {
     setManualCameraPosition(0.5, 0.5, 1);
