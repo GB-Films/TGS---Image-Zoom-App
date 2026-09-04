@@ -625,6 +625,7 @@ function CanvasZoomRenderer({
             Math.max(1, bufferAnchor),
             Math.max(1, bufferAnchor + 1),
             Math.max(1, bufferAnchor + 2),
+            Math.max(1, bufferAnchor + 3),
             Math.max(1, level - 1),
             Math.max(1, level),
             Math.max(1, nextLevel),
