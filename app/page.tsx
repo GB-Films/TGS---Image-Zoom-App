@@ -582,6 +582,13 @@ function CanvasZoomRenderer({
     const level = Math.min(Math.floor(depth), MAX_DEPTH);
     const nextLevel = Math.min(level + 1, MAX_DEPTH);
     const levelProgress = nextLevel === level ? 0 : depth - level;
+    if (opaque && [...new Set([level, nextLevel])].some((requiredLevel) => {
+      const image = DECODED_IMAGE_CACHE.get(SCENES[ZOOM_SEQUENCE[requiredLevel]].src);
+      return !image || !isDecodedSceneReady(image);
+    })) {
+      // Keep the last complete frame visible while the next guided image decodes.
+      return;
+    }
     const anchorLevel = Math.max(
       0,
       Math.floor(Math.max(0, depth - CANVAS_REBASE_DELAY)) - 1,
@@ -699,7 +706,7 @@ function CanvasZoomRenderer({
               artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
             const portalScreenX = toScreenX(portalCenterX);
             const portalScreenY = toScreenY(portalCenterY);
-            const mask = getCanvasMask(transition, opaque ? 0 : undefined);
+            const mask = getCanvasMask(transition);
 
             maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
             maskContext.drawImage(
