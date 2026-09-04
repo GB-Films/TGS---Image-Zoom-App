@@ -18,7 +18,16 @@ export const dynamic = "force-static";
 
 type MotionOrigin = { beta: number; gamma: number };
 type PointerPosition = { x: number; y: number };
-type GestureOrigin = { distance: number; depth: number };
+type GestureOrigin = {
+  distance: number;
+  depth: number;
+  cameraX: number;
+  cameraY: number;
+  viewScale: number;
+  focusX: number;
+  focusY: number;
+};
+type ExperienceMode = "manual" | "guided";
 type MaskPoint = { x: number; y: number };
 type LayerPlacement = { centerX: number; centerY: number; scale: number };
 type DecodedScene = HTMLImageElement | ImageBitmap;
@@ -404,6 +413,23 @@ const calculateCameraForAnchor = (
   return { placements, currentPlacement, cameraX, cameraY, viewScale };
 };
 
+const calculateCameraAtDepth = (transitions: TransitionSettings[], depth: number) => {
+  const level = Math.min(Math.floor(depth), MAX_DEPTH);
+  const anchorLevel = Math.max(
+    0,
+    Math.floor(Math.max(0, depth - REBASE_DELAY)) - 1,
+  );
+  const nextLevel = Math.min(level + 1, MAX_DEPTH);
+  const levelProgress = nextLevel === level ? 0 : depth - level;
+  return calculateCameraForAnchor(
+    transitions,
+    anchorLevel,
+    level,
+    nextLevel,
+    levelProgress,
+  );
+};
+
 const blurMaskAlpha = (
   pixels: ImageData,
   width: number,
@@ -499,12 +525,14 @@ function CanvasZoomRenderer({
   viewport,
   hidden,
   cacheRevision,
+  cameraOverride,
 }: {
   depth: number;
   transitions: TransitionSettings[];
   viewport: { width: number; height: number };
   hidden: boolean;
   cacheRevision: number;
+  cameraOverride?: { x: number; y: number };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layerCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -545,13 +573,16 @@ function CanvasZoomRenderer({
       0,
       Math.floor(Math.max(0, depth - CANVAS_REBASE_DELAY)) - 1,
     );
-    const camera = calculateCameraForAnchor(
+    const calculatedCamera = calculateCameraForAnchor(
       transitions,
       anchorLevel,
       level,
       nextLevel,
       levelProgress,
     );
+    const camera = cameraOverride
+      ? { ...calculatedCamera, cameraX: cameraOverride.x, cameraY: cameraOverride.y }
+      : calculatedCamera;
     const artworkWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
     const artworkHeight = artworkWidth / ARTWORK_ASPECT_RATIO;
 
@@ -639,7 +670,7 @@ function CanvasZoomRenderer({
       context.globalCompositeOperation = "source-over";
       context.drawImage(layerCanvas, 0, 0);
     }
-  }, [cacheRevision, depth, hidden, transitions, viewport]);
+  }, [cacheRevision, cameraOverride, depth, hidden, transitions, viewport]);
 
   return (
     <canvas
@@ -926,12 +957,14 @@ export default function Home() {
   const motionOriginRef = useRef<MotionOrigin | null>(null);
   const pointersRef = useRef(new Map<number, PointerPosition>());
   const gestureOriginRef = useRef<GestureOrigin | null>(null);
+  const panOriginRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const depthRef = useRef(0);
   const pendingDepthRef = useRef(0);
   const depthFrameRef = useRef(0);
 
   const [assetsReady, setAssetsReady] = useState(false);
   const [started, setStarted] = useState(false);
+  const [experienceMode, setExperienceMode] = useState<ExperienceMode>("manual");
   const [depth, setDepth] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [developerMode, setDeveloperMode] = useState(false);
@@ -942,9 +975,13 @@ export default function Home() {
   const [selectedPoint, setSelectedPoint] = useState(0);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [transitions, setTransitions] = useState(createDefaultTransitions);
+  const [manualCamera, setManualCamera] = useState({ x: 0.5, y: 0.5 });
+  const manualCameraRef = useRef(manualCamera);
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
   const [imageCacheRevision, setImageCacheRevision] = useState(0);
   const preloadLevel = Math.floor(depth);
+  const canvasWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
+  const canvasHeight = canvasWidth / ARTWORK_ASPECT_RATIO;
 
   const setWelcomeParallax = useCallback((x: number, y: number) => {
     const scene = welcomeRef.current;
@@ -1159,8 +1196,30 @@ export default function Home() {
     commitDepth(Math.min(index + 0.45, MAX_DEPTH));
   }, [commitDepth]);
 
+  const setManualCameraPosition = useCallback((x: number, y: number, viewScale = 1) => {
+    const safeScale = Math.max(viewScale, 0.001);
+    const horizontalReach = clamp(viewport.width / (2 * canvasWidth * safeScale), 0, 0.5);
+    const verticalReach = clamp(viewport.height / (2 * canvasHeight * safeScale), 0, 0.5);
+    const nextCamera = {
+      x: clamp(x, horizontalReach, 1 - horizontalReach),
+      y: clamp(y, verticalReach, 1 - verticalReach),
+    };
+    manualCameraRef.current = nextCamera;
+    setManualCamera(nextCamera);
+  }, [canvasHeight, canvasWidth, viewport]);
+
+  const resetManualCamera = useCallback(() => {
+    setManualCameraPosition(0.5, 0.5, 1);
+  }, [setManualCameraPosition]);
+
+  const selectExperienceMode = (mode: ExperienceMode) => {
+    setExperienceMode(mode);
+    resetManualCamera();
+  };
+
   const startExperience = () => {
     if (!assetsReady) return;
+    resetManualCamera();
     setStarted(true);
     setHasInteracted(false);
     window.requestAnimationFrame(() => zoomRef.current?.focus());
@@ -1173,6 +1232,8 @@ export default function Home() {
     depthFrameRef.current = 0;
     pointersRef.current.clear();
     gestureOriginRef.current = null;
+    panOriginRef.current = null;
+    resetManualCamera();
     setDepth(0);
     setHasInteracted(false);
     setDeveloperMode(false);
@@ -1194,11 +1255,31 @@ export default function Home() {
     if ((event.target as HTMLElement).closest("button, input, select, .mask-editor-overlay, .developer-panel")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (experienceMode === "manual" && pointersRef.current.size === 1) {
+      panOriginRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        cameraX: manualCameraRef.current.x,
+        cameraY: manualCameraRef.current.y,
+      };
+      setHasInteracted(true);
+    }
     if (pointersRef.current.size === 2) {
       const positions = Array.from(pointersRef.current.values()).slice(0, 2);
-      gestureOriginRef.current = {
-        distance: Math.max(distanceBetween(positions), 1), depth: depthRef.current,
+      const focus = {
+        x: (positions[0].x + positions[1].x) / 2,
+        y: (positions[0].y + positions[1].y) / 2,
       };
+      gestureOriginRef.current = {
+        distance: Math.max(distanceBetween(positions), 1),
+        depth: depthRef.current,
+        cameraX: manualCameraRef.current.x,
+        cameraY: manualCameraRef.current.y,
+        viewScale: calculatedViewScale,
+        focusX: focus.x,
+        focusY: focus.y,
+      };
+      panOriginRef.current = null;
       setHasInteracted(true);
     }
   };
@@ -1207,25 +1288,74 @@ export default function Home() {
     if (!pointersRef.current.has(event.pointerId)) return;
     event.preventDefault();
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointersRef.current.size < 2 || !gestureOriginRef.current) return;
+    if (pointersRef.current.size < 2) {
+      if (experienceMode !== "manual" || !panOriginRef.current) return;
+      const parentScreenScale = Math.max(calculatedViewScale, 0.001);
+      setManualCameraPosition(
+        panOriginRef.current.cameraX - (event.clientX - panOriginRef.current.x) / (canvasWidth * parentScreenScale),
+        panOriginRef.current.cameraY - (event.clientY - panOriginRef.current.y) / (canvasHeight * parentScreenScale),
+        parentScreenScale,
+      );
+      return;
+    }
+    if (!gestureOriginRef.current) return;
     const positions = Array.from(pointersRef.current.values()).slice(0, 2);
     const distance = Math.max(distanceBetween(positions), 1);
     const scaleDelta = Math.log2(distance / gestureOriginRef.current.distance);
-    commitDepth(gestureOriginRef.current.depth + scaleDelta * 0.9);
+    const nextDepth = clamp(gestureOriginRef.current.depth + scaleDelta * 0.9, 0, MAX_DEPTH);
+    if (experienceMode === "manual") {
+      const focus = {
+        x: (positions[0].x + positions[1].x) / 2,
+        y: (positions[0].y + positions[1].y) / 2,
+      };
+      const nextViewScale = calculateCameraAtDepth(transitions, nextDepth).viewScale;
+      const focusX = (gestureOriginRef.current.focusX - viewport.width / 2) / canvasWidth;
+      const focusY = (gestureOriginRef.current.focusY - viewport.height / 2) / canvasHeight;
+      const nextFocusX = (focus.x - viewport.width / 2) / canvasWidth;
+      const nextFocusY = (focus.y - viewport.height / 2) / canvasHeight;
+      setManualCameraPosition(
+        gestureOriginRef.current.cameraX + focusX / gestureOriginRef.current.viewScale - nextFocusX / nextViewScale,
+        gestureOriginRef.current.cameraY + focusY / gestureOriginRef.current.viewScale - nextFocusY / nextViewScale,
+        nextViewScale,
+      );
+    }
+    commitDepth(nextDepth);
   };
 
   const handleZoomPointerEnd = (event: PointerEvent<HTMLElement>) => {
     pointersRef.current.delete(event.pointerId);
     gestureOriginRef.current = null;
+    if (pointersRef.current.size === 0) panOriginRef.current = null;
   };
 
   const handleWheel = (event: WheelEvent<HTMLElement>) => {
     event.preventDefault();
     setHasInteracted(true);
-    commitDepth(depthRef.current - event.deltaY * 0.0018);
+    const nextDepth = clamp(depthRef.current - event.deltaY * 0.0018, 0, MAX_DEPTH);
+    if (experienceMode === "manual") {
+      const currentViewScale = calculatedViewScale;
+      const nextViewScale = calculateCameraAtDepth(transitions, nextDepth).viewScale;
+      const focusX = (event.clientX - viewport.width / 2) / canvasWidth;
+      const focusY = (event.clientY - viewport.height / 2) / canvasHeight;
+      setManualCameraPosition(
+        manualCameraRef.current.x + focusX / currentViewScale - focusX / nextViewScale,
+        manualCameraRef.current.y + focusY / currentViewScale - focusY / nextViewScale,
+        nextViewScale,
+      );
+    }
+    commitDepth(nextDepth);
   };
 
   const handleZoomKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (experienceMode === "manual" && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      setHasInteracted(true);
+      const step = 0.08 / Math.max(calculatedViewScale, 0.001);
+      const horizontal = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const vertical = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      setManualCameraPosition(manualCameraRef.current.x + horizontal, manualCameraRef.current.y + vertical, calculatedViewScale);
+      return;
+    }
     if (["+", "=", "ArrowUp"].includes(event.key)) {
       event.preventDefault();
       setHasInteracted(true);
@@ -1233,6 +1363,7 @@ export default function Home() {
     }
     if (["-", "_", "ArrowDown"].includes(event.key)) {
       event.preventDefault();
+      setHasInteracted(true);
       commitDepth(depthRef.current - 0.1);
     }
   };
@@ -1270,8 +1401,8 @@ export default function Home() {
   if (warmAnchorLevel !== null && !bufferAnchors.includes(warmAnchorLevel)) {
     bufferAnchors.push(warmAnchorLevel);
   }
-  const cameraX = activeCamera.cameraX;
-  const cameraY = activeCamera.cameraY;
+  const cameraX = experienceMode === "manual" ? manualCamera.x : activeCamera.cameraX;
+  const cameraY = experienceMode === "manual" ? manualCamera.y : activeCamera.cameraY;
   const calculatedViewScale = activeCamera.viewScale;
   const displayCameraX = maskIsDragging && cameraLock
     ? cameraLock.x
@@ -1282,8 +1413,6 @@ export default function Home() {
   const viewScale = maskIsDragging && cameraLock
     ? cameraLock.scale
     : calculatedViewScale;
-  const canvasWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
-  const canvasHeight = canvasWidth / ARTWORK_ASPECT_RATIO;
   const panelWidth = Math.min(360, viewport.width * 0.42);
   const editorOffsetX = developerMode && workspaceShifted && viewport.width >= 680
     ? -(panelWidth / 2 + 12)
@@ -1350,6 +1479,20 @@ export default function Home() {
               <img className="brand-logo" src={publicAsset("/brand/tgs-logo-color.svg")} alt="TGS"
                 width="500" height="185" draggable="false" />
             </div></div>
+            <div className="experience-choice" role="group" aria-label="Elegir experiencia">
+              <button className={`experience-choice__option${experienceMode === "manual" ? " experience-choice__option--selected" : ""}`}
+                type="button" onClick={() => selectExperienceMode("manual")}
+                aria-pressed={experienceMode === "manual"}>
+                <span className="experience-choice__icon" aria-hidden="true">✦</span>
+                <span><strong>Zoom libre</strong><small>Elegí la dirección con el cursor o tus dedos</small></span>
+              </button>
+              <button className={`experience-choice__option${experienceMode === "guided" ? " experience-choice__option--selected" : ""}`}
+                type="button" onClick={() => selectExperienceMode("guided")}
+                aria-pressed={experienceMode === "guided"}>
+                <span className="experience-choice__icon" aria-hidden="true">◌</span>
+                <span><strong>Zoom guiado</strong><small>Recorré la secuencia visual automática</small></span>
+              </button>
+            </div>
             <button className="start-button" type="button" onClick={startExperience}
               disabled={!assetsReady} aria-busy={!assetsReady}>
               <span>{assetsReady ? "Comenzar" : "Preparando…"}</span>
@@ -1361,8 +1504,8 @@ export default function Home() {
       ) : null}
 
       <div ref={zoomRef}
-        className={`zoom-experience${started ? " zoom-experience--active" : ""}${developerMode ? " zoom-experience--developer" : ""}`}
-        role="slider" aria-label="Experiencia de zoom infinito" aria-valuemin={0}
+        className={`zoom-experience${started ? " zoom-experience--active" : ""}${developerMode ? " zoom-experience--developer" : ""}${experienceMode === "manual" ? " zoom-experience--manual" : ""}`}
+        role="slider" aria-label={experienceMode === "manual" ? "Experiencia de zoom libre" : "Experiencia de zoom guiado"} aria-valuemin={0}
         aria-valuemax={MAX_DEPTH * 100} aria-valuenow={Math.round(depth * 100)}
         aria-hidden={!started} tabIndex={started ? 0 : -1}
         onPointerDown={handleZoomPointerDown} onPointerMove={handleZoomPointerMove}
@@ -1374,6 +1517,9 @@ export default function Home() {
           viewport={viewport}
           hidden={developerMode}
           cacheRevision={imageCacheRevision}
+          cameraOverride={experienceMode === "manual"
+            ? { x: displayCameraX, y: displayCameraY }
+            : undefined}
         />
         {developerMode ? bufferAnchors.map((bufferAnchor) => {
           const isActiveBuffer = bufferAnchor === anchorLevel;
@@ -1527,8 +1673,8 @@ export default function Home() {
           <>
             <div className={`zoom-hint${hasInteracted ? " zoom-hint--hidden" : ""}`}>
               <div className="pinch-symbol" aria-hidden="true"><span /><span /></div>
-              <p className="touch-instruction">Separá dos dedos para entrar</p>
-              <p className="desktop-instruction">Usá la rueda o el trackpad para acercarte</p>
+              <p className="touch-instruction">{experienceMode === "manual" ? "Pellizcá y arrastrá para elegir la dirección" : "Separá dos dedos para entrar"}</p>
+              <p className="desktop-instruction">{experienceMode === "manual" ? "Usá la rueda para acercarte y arrastrá para explorar" : "Usá la rueda o el trackpad para acercarte"}</p>
             </div>
             <div className={`focus-guide${hasInteracted ? " focus-guide--hidden" : ""}`}
               aria-hidden="true"><span /></div>

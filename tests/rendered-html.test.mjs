@@ -35,7 +35,7 @@ test("includes installable web app metadata and early image fetches", async () =
   ]);
   const webManifest = JSON.parse(manifest);
 
-  assert.match(layout, /manifest:\s*"\/manifest\.webmanifest"/);
+  assert.match(layout, /manifest:\s*publicAsset\("\/manifest\.webmanifest"\)/);
   assert.match(layout, /appleWebApp/);
   assert.match(layout, /rel="preload"/);
   assert.match(layout, /scene-01-majestic-mountains\.webp/);
@@ -59,6 +59,11 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /Math\.exp\(/);
   assert.doesNotMatch(page, /setCurrentScene|transitionTimerRef/);
   assert.match(page, /Separá dos dedos para entrar/);
+  assert.match(page, /Zoom libre/);
+  assert.match(page, /Zoom guiado/);
+  assert.match(page, /cameraOverride/);
+  assert.match(page, /setManualCameraPosition/);
+  assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);
   assert.match(page, /feGaussianBlur/);
   assert.match(page, /label="Feather"/);
