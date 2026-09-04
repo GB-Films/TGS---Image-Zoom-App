@@ -2,20 +2,20 @@
   "name": "TGS · Zoom infinito",
   "short_name": "TGS",
   "description": "Experiencia interactiva de zoom infinito de TGS para iPad.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#eef7f7",
   "theme_color": "#eef7f7",
   "icons": [
     {
-      "src": "/brand/icon-192.png",
+      "src": "./brand/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/brand/icon-512.png",
+      "src": "./brand/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

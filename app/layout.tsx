@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
+
 export const metadata: Metadata = {
   title: "TGS | Zoom infinito",
   description: "Experiencia interactiva de zoom infinito de TGS para iPad.",
   applicationName: "TGS",
-  manifest: "/manifest.webmanifest",
+  manifest: publicAsset("/manifest.webmanifest"),
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -13,10 +16,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/brand/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/brand/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: publicAsset("/brand/icon-192.png"), sizes: "192x192", type: "image/png" },
+      { url: publicAsset("/brand/icon-512.png"), sizes: "512x512", type: "image/png" },
     ],
-    apple: "/brand/apple-touch-icon.png",
+    apple: publicAsset("/brand/apple-touch-icon.png"),
   },
 };
 
@@ -37,8 +40,8 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        <link rel="preload" as="image" href="/scenes/scene-01-majestic-mountains.webp" type="image/webp" />
-        <link rel="preload" as="image" href="/scenes/scene-02-sunset-colors.webp" type="image/webp" />
+        <link rel="preload" as="image" href={publicAsset("/scenes/scene-01-majestic-mountains.webp")} type="image/webp" />
+        <link rel="preload" as="image" href={publicAsset("/scenes/scene-02-sunset-colors.webp")} type="image/webp" />
       </head>
       <body>{children}</body>
     </html>

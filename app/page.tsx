@@ -14,6 +14,8 @@ import {
   useState,
 } from "react";
 
+export const dynamic = "force-static";
+
 type MotionOrigin = { beta: number; gamma: number };
 type PointerPosition = { x: number; y: number };
 type GestureOrigin = { distance: number; depth: number };
@@ -33,14 +35,17 @@ type TransitionSettings = {
   points: MaskPoint[];
 };
 
+const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
+
 const SCENES = [
-  { src: "/scenes/scene-01-majestic-mountains.webp", alt: "Paisaje digital de montañas majestuosas", focalX: 0.54, focalY: 0.46, portalStart: 11 },
-  { src: "/scenes/scene-02-sunset-colors.webp", alt: "Paisaje con colores intensos de atardecer", focalX: 0.61, focalY: 0.43, portalStart: 10 },
-  { src: "/scenes/scene-03-digital-sunset.webp", alt: "Paisaje digital junto al agua al atardecer", focalX: 0.5, focalY: 0.52, portalStart: 10 },
-  { src: "/scenes/scene-04-snowy-forest.webp", alt: "Montañas nevadas en un bosque", focalX: 0.44, focalY: 0.46, portalStart: 10 },
-  { src: "/scenes/scene-05-astronaut.webp", alt: "Astronauta rodeado de planetas y flores", focalX: 0.56, focalY: 0.5, portalStart: 10 },
-  { src: "/scenes/scene-06-cosmic-landscape.webp", alt: "Paisaje cósmico de prueba", focalX: 0.43, focalY: 0.54, portalStart: 10 },
-  { src: "/scenes/scene-07-final-landscape.webp", alt: "Paisaje digital final de la secuencia", focalX: 0.5, focalY: 0.5, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-01-majestic-mountains.webp"), alt: "Paisaje digital de montañas majestuosas", focalX: 0.54, focalY: 0.46, portalStart: 11 },
+  { src: publicAsset("/scenes/scene-02-sunset-colors.webp"), alt: "Paisaje con colores intensos de atardecer", focalX: 0.61, focalY: 0.43, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-03-digital-sunset.webp"), alt: "Paisaje digital junto al agua al atardecer", focalX: 0.5, focalY: 0.52, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-04-snowy-forest.webp"), alt: "Montañas nevadas en un bosque", focalX: 0.44, focalY: 0.46, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-05-astronaut.webp"), alt: "Astronauta rodeado de planetas y flores", focalX: 0.56, focalY: 0.5, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-06-cosmic-landscape.webp"), alt: "Paisaje cósmico de prueba", focalX: 0.43, focalY: 0.54, portalStart: 10 },
+  { src: publicAsset("/scenes/scene-07-final-landscape.webp"), alt: "Paisaje digital final de la secuencia", focalX: 0.5, focalY: 0.5, portalStart: 10 },
 ] as const;
 
 const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -1342,7 +1347,7 @@ export default function Home() {
             <div className="logo-float"><div className="logo-scene">
               <div className="logo-halo" aria-hidden="true" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="brand-logo" src="/brand/tgs-logo-color.svg" alt="TGS"
+              <img className="brand-logo" src={publicAsset("/brand/tgs-logo-color.svg")} alt="TGS"
                 width="500" height="185" draggable="false" />
             </div></div>
             <button className="start-button" type="button" onClick={startExperience}
@@ -1405,7 +1410,7 @@ export default function Home() {
         <header className="zoom-header">
           <div className="zoom-brand" aria-label="TGS">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/tgs-logo-color.svg" alt="TGS" draggable="false" />
+            <img src={publicAsset("/brand/tgs-logo-color.svg")} alt="TGS" draggable="false" />
           </div>
           <div className="zoom-header__actions">
             <button className="developer-button" type="button"
