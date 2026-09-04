@@ -66,6 +66,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /opacity <= 0\.01/);
   assert.match(page, /bufferAnchor \+ 2/);
   assert.match(page, /preloadLevel \+ 2/);
+  assert.match(page, /preloadLevel \+ 3/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);
@@ -88,7 +89,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /pendingDepthRef/);
   assert.match(page, /depthFrameRef/);
   assert.match(page, /bufferAnchors\.map/);
-  assert.match(page, /STARTUP_DECODE_LEVELS = 3/);
+  assert.match(page, /STARTUP_DECODE_LEVELS = 4/);
   assert.match(page, /RENDER_AHEAD_LEVELS = 3/);
   assert.match(page, /fetchPriority=/);
   assert.match(page, /interpolateSpline/);
@@ -99,7 +100,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /DECODED_IMAGE_CACHE/);
   assert.match(page, /releaseScenesOutside/);
   assert.match(page, /DECODE_BEHIND_LEVELS = 2/);
-  assert.match(page, /DECODE_AHEAD_LEVELS = 2/);
+  assert.match(page, /DECODE_AHEAD_LEVELS = 3/);
   assert.match(page, /MAX_CONCURRENT_DECODES = 2/);
   assert.match(page, /acquireDecodeSlot/);
   assert.match(page, /cache: "force-cache"/);

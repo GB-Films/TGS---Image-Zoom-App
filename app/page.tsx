@@ -63,9 +63,9 @@ const SETTINGS_KEY = "tgs-zoom-mask-settings-v2";
 const ARTWORK_ASPECT_RATIO = 16 / 9;
 const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
-const STARTUP_DECODE_LEVELS = 3;
+const STARTUP_DECODE_LEVELS = 4;
 const DECODE_BEHIND_LEVELS = 2;
-const DECODE_AHEAD_LEVELS = 2;
+const DECODE_AHEAD_LEVELS = 3;
 const REBASE_DELAY = 0.18;
 const PREWARM_LEAD = 0.65;
 const REBASE_BLEND_DEPTH = 0.12;
@@ -1118,6 +1118,7 @@ export default function Home() {
       preloadLevel,
       preloadLevel + 1,
       preloadLevel + 2,
+      preloadLevel + 3,
       preloadLevel - 1,
       preloadLevel - 2,
     ].filter((level, index, levels) =>
