@@ -421,13 +421,32 @@ const calculateCameraAtDepth = (transitions: TransitionSettings[], depth: number
   );
   const nextLevel = Math.min(level + 1, MAX_DEPTH);
   const levelProgress = nextLevel === level ? 0 : depth - level;
-  return calculateCameraForAnchor(
+  const activeCamera = calculateCameraForAnchor(
     transitions,
     anchorLevel,
     level,
     nextLevel,
     levelProgress,
   );
+  const rebaseBlendStart = anchorLevel + 1 + REBASE_DELAY;
+  const rebaseBlend = anchorLevel === 0
+    ? 1
+    : clamp((depth - rebaseBlendStart) / REBASE_BLEND_DEPTH, 0, 1);
+  if (anchorLevel > 0 && rebaseBlend < 1) {
+    const previousCamera = calculateCameraForAnchor(
+      transitions,
+      anchorLevel - 1,
+      level,
+      nextLevel,
+      levelProgress,
+    );
+    return {
+      ...activeCamera,
+      viewScale: previousCamera.viewScale +
+        (activeCamera.viewScale - previousCamera.viewScale) * rebaseBlend,
+    };
+  }
+  return activeCamera;
 };
 
 const blurMaskAlpha = (
@@ -526,6 +545,7 @@ function CanvasZoomRenderer({
   hidden,
   cacheRevision,
   cameraOverride,
+  renderBuffers,
 }: {
   depth: number;
   transitions: TransitionSettings[];
@@ -533,6 +553,7 @@ function CanvasZoomRenderer({
   hidden: boolean;
   cacheRevision: number;
   cameraOverride?: { x: number; y: number };
+  renderBuffers?: Array<{ anchorLevel: number; opacity: number }>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layerCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -573,25 +594,8 @@ function CanvasZoomRenderer({
       0,
       Math.floor(Math.max(0, depth - CANVAS_REBASE_DELAY)) - 1,
     );
-    const calculatedCamera = calculateCameraForAnchor(
-      transitions,
-      anchorLevel,
-      level,
-      nextLevel,
-      levelProgress,
-    );
-    const camera = cameraOverride
-      ? { ...calculatedCamera, cameraX: cameraOverride.x, cameraY: cameraOverride.y }
-      : calculatedCamera;
     const artworkWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
     const artworkHeight = artworkWidth / ARTWORK_ASPECT_RATIO;
-
-    const toScreenX = (coordinate: number) =>
-      (viewport.width / 2 +
-        (coordinate - camera.cameraX) * artworkWidth * camera.viewScale) * pixelRatio;
-    const toScreenY = (coordinate: number) =>
-      (viewport.height / 2 +
-        (coordinate - camera.cameraY) * artworkHeight * camera.viewScale) * pixelRatio;
 
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.fillStyle = "#001827";
@@ -599,78 +603,105 @@ function CanvasZoomRenderer({
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
 
-    const lastLayer = Math.min(MAX_DEPTH, anchorLevel + 3);
-    for (let layer = anchorLevel; layer <= lastLayer; layer += 1) {
-      const placement = camera.placements[layer];
-      const image = DECODED_IMAGE_CACHE.get(SCENES[ZOOM_SEQUENCE[layer]].src);
-      if (!placement || !image || !isDecodedSceneReady(image)) continue;
-
-      layerContext.setTransform(1, 0, 0, 1, 0, 0);
-      layerContext.clearRect(0, 0, renderWidth, renderHeight);
-      layerContext.globalCompositeOperation = "source-over";
-      layerContext.globalAlpha = 1;
-      layerContext.imageSmoothingEnabled = true;
-      layerContext.imageSmoothingQuality = "high";
-
-      const layerWidth = artworkWidth * camera.viewScale * placement.scale * pixelRatio;
-      const layerHeight = artworkHeight * camera.viewScale * placement.scale * pixelRatio;
-      const layerCenterX = toScreenX(placement.centerX);
-      const layerCenterY = toScreenY(placement.centerY);
-      layerContext.drawImage(
-        image,
-        layerCenterX - layerWidth / 2,
-        layerCenterY - layerHeight / 2,
-        layerWidth,
-        layerHeight,
+    const buffers = renderBuffers ?? [{ anchorLevel, opacity: 1 }];
+    const renderBuffer = (bufferAnchor: number, opacity: number) => {
+      // Warm buffers are kept for the DOM editor, but drawing a nearly invisible
+      // 4K scene on every frame would waste the canvas budget.
+      if (opacity <= 0.01) return;
+      const calculatedCamera = calculateCameraForAnchor(
+        transitions,
+        bufferAnchor,
+        level,
+        nextLevel,
+        levelProgress,
       );
-
-      if (layer > anchorLevel) {
-        maskContext.setTransform(1, 0, 0, 1, 0, 0);
-        maskContext.clearRect(0, 0, renderWidth, renderHeight);
-        maskContext.globalAlpha = 1;
-        let maskDrawn = false;
-
-        for (let transitionLevel = anchorLevel; transitionLevel < layer; transitionLevel += 1) {
-          const parentPlacement = camera.placements[transitionLevel];
-          const transition = transitions[transitionLevel];
-          if (!parentPlacement || !transition) continue;
-
-          const portalScale = transition.portalScale / 100;
-          const portalCenterX =
-            parentPlacement.centerX +
-            parentPlacement.scale * (transition.portalX / 100 - 0.5);
-          const portalCenterY =
-            parentPlacement.centerY +
-            parentPlacement.scale * (transition.portalY / 100 - 0.5);
-          const portalWidth =
-            artworkWidth * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
-          const portalHeight =
-            artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
-          const portalScreenX = toScreenX(portalCenterX);
-          const portalScreenY = toScreenY(portalCenterY);
-          const mask = getCanvasMask(transition);
-
-          maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
-          maskContext.drawImage(
-            mask,
-            portalScreenX - portalWidth / 2,
-            portalScreenY - portalHeight / 2,
-            portalWidth,
-            portalHeight,
-          );
-          maskDrawn = true;
-        }
-
-        if (maskDrawn) {
-          layerContext.globalCompositeOperation = "destination-in";
-          layerContext.drawImage(maskCanvas, 0, 0);
-        }
-      }
+      const camera = cameraOverride
+        ? { ...calculatedCamera, cameraX: cameraOverride.x, cameraY: cameraOverride.y }
+        : calculatedCamera;
+      const toScreenX = (coordinate: number) =>
+        (viewport.width / 2 +
+          (coordinate - camera.cameraX) * artworkWidth * camera.viewScale) * pixelRatio;
+      const toScreenY = (coordinate: number) =>
+        (viewport.height / 2 +
+          (coordinate - camera.cameraY) * artworkHeight * camera.viewScale) * pixelRatio;
 
       context.globalCompositeOperation = "source-over";
-      context.drawImage(layerCanvas, 0, 0);
-    }
-  }, [cacheRevision, cameraOverride, depth, hidden, transitions, viewport]);
+      context.globalAlpha = opacity;
+      const lastLayer = Math.min(MAX_DEPTH, bufferAnchor + 3);
+      for (let layer = bufferAnchor; layer <= lastLayer; layer += 1) {
+        const placement = camera.placements[layer];
+        const image = DECODED_IMAGE_CACHE.get(SCENES[ZOOM_SEQUENCE[layer]].src);
+        if (!placement || !image || !isDecodedSceneReady(image)) continue;
+
+        layerContext.setTransform(1, 0, 0, 1, 0, 0);
+        layerContext.clearRect(0, 0, renderWidth, renderHeight);
+        layerContext.globalCompositeOperation = "source-over";
+        layerContext.globalAlpha = 1;
+        layerContext.imageSmoothingEnabled = true;
+        layerContext.imageSmoothingQuality = "high";
+
+        const layerWidth = artworkWidth * camera.viewScale * placement.scale * pixelRatio;
+        const layerHeight = artworkHeight * camera.viewScale * placement.scale * pixelRatio;
+        const layerCenterX = toScreenX(placement.centerX);
+        const layerCenterY = toScreenY(placement.centerY);
+        layerContext.drawImage(
+          image,
+          layerCenterX - layerWidth / 2,
+          layerCenterY - layerHeight / 2,
+          layerWidth,
+          layerHeight,
+        );
+
+        if (layer > bufferAnchor) {
+          maskContext.setTransform(1, 0, 0, 1, 0, 0);
+          maskContext.clearRect(0, 0, renderWidth, renderHeight);
+          maskContext.globalAlpha = 1;
+          let maskDrawn = false;
+
+          for (let transitionLevel = bufferAnchor; transitionLevel < layer; transitionLevel += 1) {
+            const parentPlacement = camera.placements[transitionLevel];
+            const transition = transitions[transitionLevel];
+            if (!parentPlacement || !transition) continue;
+
+            const portalScale = transition.portalScale / 100;
+            const portalCenterX =
+              parentPlacement.centerX +
+              parentPlacement.scale * (transition.portalX / 100 - 0.5);
+            const portalCenterY =
+              parentPlacement.centerY +
+              parentPlacement.scale * (transition.portalY / 100 - 0.5);
+            const portalWidth =
+              artworkWidth * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
+            const portalHeight =
+              artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
+            const portalScreenX = toScreenX(portalCenterX);
+            const portalScreenY = toScreenY(portalCenterY);
+            const mask = getCanvasMask(transition);
+
+            maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
+            maskContext.drawImage(
+              mask,
+              portalScreenX - portalWidth / 2,
+              portalScreenY - portalHeight / 2,
+              portalWidth,
+              portalHeight,
+            );
+            maskDrawn = true;
+          }
+
+          if (maskDrawn) {
+            layerContext.globalCompositeOperation = "destination-in";
+            layerContext.drawImage(maskCanvas, 0, 0);
+          }
+        }
+
+        context.drawImage(layerCanvas, 0, 0);
+      }
+    };
+
+    for (const buffer of buffers) renderBuffer(buffer.anchorLevel, buffer.opacity);
+    context.globalAlpha = 1;
+  }, [cacheRevision, cameraOverride, depth, hidden, renderBuffers, transitions, viewport]);
 
   return (
     <canvas
@@ -1401,9 +1432,21 @@ export default function Home() {
   if (warmAnchorLevel !== null && !bufferAnchors.includes(warmAnchorLevel)) {
     bufferAnchors.push(warmAnchorLevel);
   }
+  const canvasRenderBuffers = bufferAnchors.map((bufferAnchor) => {
+    const isActiveBuffer = bufferAnchor === anchorLevel;
+    const isPreviousBuffer = bufferAnchor === previousAnchorLevel;
+    const opacity = isPreviousBuffer
+      ? 1 - rebaseBlend
+      : isActiveBuffer
+        ? previousAnchorLevel === null ? 1 : rebaseBlend
+        : 0.001;
+    return { anchorLevel: bufferAnchor, opacity };
+  });
   const cameraX = experienceMode === "manual" ? manualCamera.x : activeCamera.cameraX;
   const cameraY = experienceMode === "manual" ? manualCamera.y : activeCamera.cameraY;
-  const calculatedViewScale = activeCamera.viewScale;
+  const calculatedViewScale = experienceMode === "manual"
+    ? calculateCameraAtDepth(transitions, depth).viewScale
+    : activeCamera.viewScale;
   const displayCameraX = maskIsDragging && cameraLock
     ? cameraLock.x
     : cameraX;
@@ -1520,6 +1563,7 @@ export default function Home() {
           cameraOverride={experienceMode === "manual"
             ? { x: displayCameraX, y: displayCameraY }
             : undefined}
+          renderBuffers={canvasRenderBuffers}
         />
         {developerMode ? bufferAnchors.map((bufferAnchor) => {
           const isActiveBuffer = bufferAnchor === anchorLevel;
