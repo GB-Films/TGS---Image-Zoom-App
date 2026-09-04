@@ -482,8 +482,9 @@ const blurMaskAlpha = (
   }
 };
 
-const getCanvasMask = (settings: TransitionSettings) => {
-  const cacheKey = JSON.stringify([settings.smoothing, settings.feather, settings.points]);
+const getCanvasMask = (settings: TransitionSettings, featherOverride?: number) => {
+  const feather = featherOverride ?? settings.feather;
+  const cacheKey = JSON.stringify([settings.smoothing, feather, settings.points]);
   const cachedMask = CANVAS_MASK_CACHE.get(cacheKey);
   if (cachedMask) return cachedMask;
 
@@ -500,7 +501,7 @@ const getCanvasMask = (settings: TransitionSettings) => {
   context.fillStyle = "#ffffff";
   context.fill(path);
   context.setTransform(1, 0, 0, 1, 0, 0);
-  const featherRadius = Math.round(settings.feather / 1000 * width);
+  const featherRadius = Math.round(feather / 1000 * width);
   if (featherRadius > 0) {
     const pixels = context.getImageData(0, 0, width, height);
     blurMaskAlpha(pixels, width, height, featherRadius);
@@ -698,7 +699,7 @@ function CanvasZoomRenderer({
               artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
             const portalScreenX = toScreenX(portalCenterX);
             const portalScreenY = toScreenY(portalCenterY);
-            const mask = getCanvasMask(transition);
+            const mask = getCanvasMask(transition, opaque ? 0 : undefined);
 
             maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
             maskContext.drawImage(
