@@ -34,6 +34,65 @@ button {
   font: inherit;
 }
 
+.editor-access {
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 28px;
+  overflow: auto;
+  border: 1px solid #c8dce7;
+  border-radius: 20px;
+  background: #fff;
+  color: var(--tgs-blue-deep);
+  box-shadow: 0 24px 80px #00234c40;
+}
+
+.editor-access::backdrop { background: #001d3db3; }
+.editor-access h2 { margin: 0 0 12px; font-size: 24px; font-weight: 700; }
+.editor-access p { margin: 0 0 20px; font-size: 16px; line-height: 1.5; }
+.editor-access label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.editor-access input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #7391ae;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 18px;
+}
+.editor-access input:focus-visible,
+.editor-access button:focus-visible { outline: 3px solid var(--tgs-cyan); outline-offset: 3px; }
+.editor-access p[role="alert"] { margin: 12px 0 0; color: #a32323; font-size: 14px; }
+.editor-access__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.editor-access__actions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #bfd1e0;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+.editor-access__actions button[type="submit"] { background: var(--tgs-blue); border-color: var(--tgs-blue); color: #fff; }
+.editor-access button:disabled { cursor: wait; opacity: .65; }
+.editor-publication { padding: 14px 0; border-bottom: 1px solid #c8dce7; }
+.editor-publication > button { width: 100%; background: var(--tgs-blue); color: white; }
+.editor-publication button, .mask-update-notice button {
+  min-height: 40px; padding: 8px 12px; border: 1px solid #9bb8cf;
+  border-radius: 8px; font-size: 14px; cursor: pointer;
+}
+.editor-publication button:disabled { opacity: .55; cursor: default; }
+.editor-publication > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.editor-publication p { margin: 10px 0 0; font-size: 14px; line-height: 1.4; }
+.editor-publication p[role="status"] { font-weight: 600; }
+.mask-update-notice {
+  position: fixed; z-index: 60; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%;
+  transform: translateX(-50%); width: max-content; max-width: calc(100vw - 28px);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px;
+  border: 1px solid #9bb8cf; border-radius: 12px; background: white;
+  color: var(--tgs-blue-deep); box-shadow: 0 8px 30px #00234c25; font-size: 14px;
+}
+
 .welcome-screen {
   --logo-x: 0px;
   --logo-y: 0px;

@@ -18,6 +18,16 @@ El script contiene los nombres originales y el recorte específico de cada image
 
 ## Integración
 
+«Ajustar máscaras» valida la contraseña en el servicio antes de abrir el editor. Cancelar o presionar Escape vuelve a la experiencia; «Modo usuario» y recargar vuelven a bloquear el acceso. La clave se configura como secreto de producción, no se incluye en este repositorio ni en los archivos del visor. La sesión temporal vive solo en memoria y vence a las ocho horas; al salir se solicita su revocación.
+
+El visor de GitHub Pages consulta la configuración publicada en el servicio indicado por `public/mask-service.json`. «Publicar para todos» guarda las siete máscaras en D1 y crea una versión con historial. Las publicaciones concurrentes se rechazan si parten de una versión anterior, sin sobrescribir cambios ajenos. Reintentar una publicación con la misma identificación no duplica versiones.
+
+Los cambios sin publicar son una vista previa. Se conserva un borrador local solo para el editor; nunca reemplaza automáticamente la configuración pública. «Recuperar borrador» también permite recuperar los ajustes antiguos de este navegador. «Cargar publicada» conserva el borrador y carga la versión compartida. Al salir del editor, el visor vuelve a la versión publicada.
+
+Cada visita consulta la versión vigente sin caché. Las pestañas abiertas verifican novedades cada treinta segundos y al recuperar el foco. Se avisa de una actualización y se ofrece cargarla reiniciando el recorrido, sin cambiar máscaras en mitad del zoom. Si falla el servicio se informa y se conserva la última versión cargada (o las máscaras iniciales si todavía no se pudo cargar ninguna).
+
+Ver `docs/mask-service.md` para el servicio, las pruebas y las dos publicaciones independientes. GitHub Pages sigue alojando el visor; Sites aloja solo el servicio de máscaras, sin las ilustraciones.
+
 Las siete entradas tienen ahora contornos propios en `app/transition-presets.json`. Se pueden afinar con «Ajustar máscaras» y recuperar por unión con «Restablecer». La clave `tgs-zoom-mask-settings-production-8-v3` activa esta propuesta sin borrar los ajustes anteriores del navegador.
 
 | Unión | Entrada propuesta | Tratamiento |

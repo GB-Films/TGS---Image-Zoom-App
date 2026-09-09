@@ -81,13 +81,14 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /label="Feather"/);
   assert.match(page, /blurMaskAlpha/);
   assert.match(page, /Ajustar máscaras/);
-  assert.match(page, /localStorage\.setItem\(SETTINGS_KEY/);
+  assert.match(page, /useSharedMasks\(transitions, setTransitions, developerMode, maskIsDragging\)/);
   assert.match(page, /ARTWORK_ASPECT_RATIO = 16 \/ 9/);
   assert.match(page, /MAX_SUPPORTED_IMAGES = 15/);
   assert.match(page, /MASK_PRESETS/);
   assert.match(page, /editorHandleScale/);
   assert.match(page, /Math\.floor\(depth\) \+ 1/);
-  assert.match(page, /setTimeout\(\(\) => \{/);
+  const persistence = await readFile(new URL("../app/use-shared-masks.ts", import.meta.url), "utf8");
+  assert.match(persistence, /setTimeout\(saveDraft,450\)/);
   assert.match(page, /mask-center-handle/);
   assert.match(page, /movePortalByPixels/);
   assert.match(page, /REBASE_DELAY = 0\.18/);

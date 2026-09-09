@@ -14,6 +14,9 @@ import {
   useState,
 } from "react";
 import productionTransitions from "./transition-presets.json";
+import MaskEditorAccess from "./mask-editor-access";
+import { useSharedMasks } from "./use-shared-masks";
+import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
 
 export const dynamic = "force-static";
@@ -34,18 +37,7 @@ type MaskPoint = { x: number; y: number };
 type LayerPlacement = { centerX: number; centerY: number; scale: number };
 type DecodedScene = HTMLImageElement | ImageBitmap;
 
-type TransitionSettings = {
-  portalX: number;
-  portalY: number;
-  portalScale: number;
-  imageX: number;
-  imageY: number;
-  imageScale: number;
-  matte?: string;
-  smoothing: number;
-  feather: number;
-  points: MaskPoint[];
-};
+type TransitionSettings = MaskSettings;
 
 type MaskStyle = Pick<TransitionSettings, "points" | "smoothing" | "feather">;
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -64,7 +56,6 @@ const SCENES = [
 
 const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
-const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v3";
 const ARTWORK_ASPECT_RATIO = 16 / 9;
 const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
@@ -975,13 +966,15 @@ export default function Home() {
   const [depth, setDepth] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [developerMode, setDeveloperMode] = useState(false);
+  const [editorAccessRequested, setEditorAccessRequested] = useState(false);
   const [workspaceShifted, setWorkspaceShifted] = useState(true);
   const [maskIsDragging, setMaskIsDragging] = useState(false);
   const [cameraLock, setCameraLock] = useState<{ x: number; y: number; scale: number } | null>(null);
   const [editingTransition, setEditingTransition] = useState(0);
   const [selectedPoint, setSelectedPoint] = useState(0);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [transitions, setTransitions] = useState(createDefaultTransitions);
+  const sharedMasks = useSharedMasks(transitions, setTransitions, developerMode, maskIsDragging);
+  const [updateError, setUpdateError] = useState("");
   const [manualCamera, setManualCamera] = useState({ x: 0.5, y: 0.5 });
   const manualCameraRef = useRef(manualCamera);
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
@@ -1159,43 +1152,6 @@ export default function Home() {
     releaseScenesOutside(ACTIVE_IMAGE_SOURCES);
   }, []);
 
-  useEffect(() => {
-    const loadFrame = window.requestAnimationFrame(() => {
-      try {
-        const saved = window.localStorage.getItem(SETTINGS_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as TransitionSettings[];
-          if (Array.isArray(parsed) && parsed.length === MAX_DEPTH) {
-            setTransitions(parsed.map((transition) => ({
-              portalX: transition.portalX,
-              portalY: transition.portalY,
-              portalScale: transition.portalScale,
-              imageX: transition.imageX,
-              imageY: transition.imageY,
-              imageScale: transition.imageScale,
-              matte: transition.matte ?? "#ffffff",
-              smoothing: transition.smoothing,
-              feather: transition.feather ?? 24,
-              points: transition.points,
-            })));
-          }
-        }
-      } catch {
-        // Invalid local settings fall back to the carefully chosen defaults.
-      }
-      setSettingsLoaded(true);
-    });
-    return () => window.cancelAnimationFrame(loadFrame);
-  }, []);
-
-  useEffect(() => {
-    if (!settingsLoaded || maskIsDragging) return;
-    const saveTimer = window.setTimeout(() => {
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(transitions));
-    }, 450);
-    return () => window.clearTimeout(saveTimer);
-  }, [maskIsDragging, settingsLoaded, transitions]);
-
   const scheduleVisualCommit = useCallback(() => {
     if (!depthFrameRef.current) {
       depthFrameRef.current = window.requestAnimationFrame(() => {
@@ -1266,7 +1222,7 @@ export default function Home() {
   }, [commitDepth, setManualCameraPosition, transitions]);
 
   const startExperience = () => {
-    if (!assetsReady) return;
+    if (!assetsReady || !sharedMasks.ready) return;
     resetManualCamera();
     setStarted(true);
     setHasInteracted(false);
@@ -1274,6 +1230,8 @@ export default function Home() {
   };
 
   const restartExperience = () => {
+    if (sharedMasks.publishing) return;
+    if (developerMode) sharedMasks.exit();
     depthRef.current = 0;
     pendingDepthRef.current = 0;
     window.cancelAnimationFrame(depthFrameRef.current);
@@ -1561,8 +1519,8 @@ export default function Home() {
               </div>
             </div>
             <button className="start-button" type="button" onClick={startExperience}
-              disabled={!assetsReady} aria-busy={!assetsReady}>
-              <span>{assetsReady ? "Comenzar" : "Preparando…"}</span>
+              disabled={!assetsReady || !sharedMasks.ready} aria-busy={!assetsReady || !sharedMasks.ready}>
+              <span>{assetsReady && sharedMasks.ready ? "Comenzar" : "Preparando…"}</span>
               <span className="start-button__arrow" aria-hidden="true">→</span>
             </button>
           </section>
@@ -1637,13 +1595,14 @@ export default function Home() {
           </div>
           <div className="zoom-header__actions">
             <button className="developer-button" type="button"
+              disabled={sharedMasks.publishing}
               onClick={() => {
-                if (!developerMode) frameTransition(editingTransition);
-                setDeveloperMode(!developerMode);
+                if (developerMode) { sharedMasks.exit(); setDeveloperMode(false); }
+                else setEditorAccessRequested(true);
               }}>
               {developerMode ? "Modo usuario" : "Ajustar máscaras"}
             </button>
-            <button className="restart-button" type="button" onClick={restartExperience}>Reiniciar</button>
+            <button className="restart-button" type="button" disabled={sharedMasks.publishing} onClick={restartExperience}>Reiniciar</button>
           </div>
         </header>
 
@@ -1652,8 +1611,22 @@ export default function Home() {
             onWheel={(event) => event.stopPropagation()}>
             <div className="developer-panel__heading">
               <div><span className="developer-kicker">Modo desarrollador</span><h2>Unión {editingTransition + 1}</h2></div>
-              <span className="saved-badge">Guardado local</span>
+              <span className="saved-badge">{sharedMasks.dirty ? "Borrador · no publicado" : `Publicada · v${sharedMasks.published.version}`}</span>
             </div>
+            <section className="editor-publication" aria-label="Publicación de máscaras">
+              <button type="button" disabled={sharedMasks.publishing || !sharedMasks.dirty}
+                onClick={() => void sharedMasks.publish()}>{sharedMasks.publishing ? "Publicando…" : "Publicar para todos"}</button>
+              <div>
+                <button type="button" disabled={sharedMasks.publishing} onClick={sharedMasks.restoreDraft}>Recuperar borrador</button>
+                <button type="button" disabled={sharedMasks.publishing} onClick={async () => {
+                  try { await sharedMasks.loadLatest(); setUpdateError(""); }
+                  catch { setUpdateError("No se pudo cargar la versión publicada. El borrador sigue intacto."); }
+                }}>Cargar publicada</button>
+              </div>
+              <p>Los ajustes son una vista previa hasta que publiques. Al salir, volvés a la versión que ven los visitantes.</p>
+              {sharedMasks.message ? <p role="status">{sharedMasks.message}</p> : null}
+              {updateError ? <p role="alert">{updateError}</p> : null}
+            </section>
             <div className="editor-workspace-actions">
               <span>Demo: {ZOOM_SEQUENCE.length} de hasta {MAX_SUPPORTED_IMAGES} imágenes 4K</span>
               <button type="button" onClick={() => setWorkspaceShifted(!workspaceShifted)}>
@@ -1689,7 +1662,7 @@ export default function Home() {
                 })}
               </div>
               <div className="point-actions">
-                <button type="button" onClick={() => {
+                <button type="button" disabled={activeTransition.points.length >= 64} onClick={() => {
                   const points = activeTransition.points;
                   const nextIndex = (selectedPoint + 1) % points.length;
                   const point = points[selectedPoint];
@@ -1765,6 +1738,27 @@ export default function Home() {
           </>
         ) : null}
       </div>
+      {sharedMasks.pending || sharedMasks.loadError ? (
+        <div className="mask-update-notice" role="status">
+          <span>{sharedMasks.pending ? "Hay una nueva versión de las máscaras." : sharedMasks.loadError}</span>
+          {!developerMode ? <button type="button" onClick={async () => {
+            try { await sharedMasks.loadLatest(); restartExperience(); setUpdateError(""); }
+            catch { setUpdateError("No se pudo cargar la actualización. Intentá nuevamente."); }
+          }}>Cargar actualización</button> : null}
+          {!developerMode && updateError ? <span>{updateError}</span> : null}
+        </div>
+      ) : null}
+      {editorAccessRequested ? (
+        <MaskEditorAccess
+          authenticate={sharedMasks.login}
+          onCancel={() => setEditorAccessRequested(false)}
+          onUnlock={() => {
+            setEditorAccessRequested(false);
+            frameTransition(editingTransition);
+            setDeveloperMode(true);
+          }}
+        />
+      ) : null}
     </>
   );
 }
