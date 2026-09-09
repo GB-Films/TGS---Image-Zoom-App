@@ -1377,7 +1377,10 @@ export default function Home() {
   const level = Math.min(Math.floor(depth), MAX_DEPTH);
   // Guided zoom promotes every completed image to an opaque base immediately.
   // Manual zoom keeps the delayed rebase that stabilizes free camera movement.
-  const anchorLevel = developerMode ? 0 : experienceMode === "guided"
+  // The public viewer keeps its normal progressive rebase. While editing, use
+  // the selected union as the local coordinate origin so deep unions never
+  // produce enormous transforms that push the handles out of the viewport.
+  const anchorLevel = developerMode ? editingTransition : experienceMode === "guided"
     ? level
     : Math.max(
         0,
