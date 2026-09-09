@@ -40,8 +40,8 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        <link rel="preload" as="image" href={publicAsset("/scenes/scene-01-majestic-mountains.webp")} type="image/webp" />
-        <link rel="preload" as="image" href={publicAsset("/scenes/scene-02-sunset-colors.webp")} type="image/webp" />
+        <link rel="preload" as="image" href={publicAsset("/scenes/tgs-01-oficina.webp")} type="image/webp" />
+        <link rel="preload" as="image" href={publicAsset("/scenes/tgs-02-operario-cartelera.webp")} type="image/webp" />
       </head>
       <body>{children}</body>
     </html>

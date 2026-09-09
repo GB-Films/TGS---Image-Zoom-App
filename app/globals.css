@@ -467,6 +467,7 @@ button {
 
 .manual-base-image {
   position: absolute;
+  max-width: none;
   z-index: 0;
   top: 50%;
   left: 50%;

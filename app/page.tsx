@@ -48,18 +48,19 @@ const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
 
 const SCENES = [
-  { src: publicAsset("/scenes/scene-01-majestic-mountains.webp"), alt: "Paisaje digital de montañas majestuosas", focalX: 0.54, focalY: 0.46, portalStart: 11 },
-  { src: publicAsset("/scenes/scene-02-sunset-colors.webp"), alt: "Paisaje con colores intensos de atardecer", focalX: 0.61, focalY: 0.43, portalStart: 10 },
-  { src: publicAsset("/scenes/scene-03-digital-sunset.webp"), alt: "Paisaje digital junto al agua al atardecer", focalX: 0.5, focalY: 0.52, portalStart: 10 },
-  { src: publicAsset("/scenes/scene-04-snowy-forest.webp"), alt: "Montañas nevadas en un bosque", focalX: 0.44, focalY: 0.46, portalStart: 10 },
-  { src: publicAsset("/scenes/scene-05-astronaut.webp"), alt: "Astronauta rodeado de planetas y flores", focalX: 0.56, focalY: 0.5, portalStart: 10 },
-  { src: publicAsset("/scenes/scene-06-cosmic-landscape.webp"), alt: "Paisaje cósmico de prueba", focalX: 0.43, focalY: 0.54, portalStart: 10 },
-  { src: publicAsset("/scenes/scene-07-final-landscape.webp"), alt: "Paisaje digital final de la secuencia", focalX: 0.5, focalY: 0.5, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-01-oficina.webp"), alt: "Reunión de oficina: nacimiento de Transportadora de Gas del Sur en 1992", focalX: 0.51, focalY: 0.88, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-02-operario-cartelera.webp"), alt: "Operario de TGS frente a la cartelera de inauguraciones de plantas", focalX: 0.29, focalY: 0.44, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-03-bolsa-ny.webp"), alt: "Inicio de la cotización de TGS en la Bolsa de Nueva York en 1994", focalX: 0.5, focalY: 0.85, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-04-gasoducto.webp"), alt: "Expansión de la red de gasoductos y construcción de plantas", focalX: 0.46, focalY: 0.66, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-05-planta-cerri.webp"), alt: "Inauguración del Tren C del Complejo Cerri en 1998", focalX: 0.53, focalY: 0.66, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-06-antena.webp"), alt: "Antena de comunicaciones y nacimiento de Telcosur en 2000", focalX: 0.825, focalY: 0.31, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-07-mas-plantas.webp"), alt: "Más plantas y desarrollo de TGS entre 2004 y 2009", focalX: 0.56, focalY: 0.3, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-08-gasoducto-submarino.webp"), alt: "Inauguración del gasoducto submarino Magallanes en 2010", focalX: 0.5, focalY: 0.5, portalStart: 10 },
 ] as const;
 
-const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6] as const;
+const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
-const SETTINGS_KEY = "tgs-zoom-mask-settings-v2";
+const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v1";
 const ARTWORK_ASPECT_RATIO = 16 / 9;
 const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
