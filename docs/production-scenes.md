@@ -2,7 +2,7 @@
 
 Orden: Oficina → Operario y cartelera → Bolsa de Nueva York → Gasoducto → Planta Cerri → Antena → Más plantas → Gasoducto submarino.
 
-Los archivos `public/scenes/tgs-01-*.webp` a `tgs-08-*.webp` reemplazan la secuencia de demostración en ambos modos. Los archivos anteriores se conservan, pero ya no se precargan ni forman parte del recorrido.
+Los archivos `public/scenes/tgs-01-*.webp` a `tgs-08-*.webp` reemplazan la secuencia de demostración en el modo libre. Los archivos anteriores se conservan, pero ya no se precargan ni forman parte del recorrido.
 
 ## Preparación
 
@@ -18,7 +18,7 @@ El script contiene los nombres originales y el recorte específico de cada image
 
 ## Integración
 
-Las siete entradas tienen ahora contornos propios en `app/transition-presets.json`. Se pueden afinar con «Ajustar máscaras» y recuperar por unión con «Restablecer». La clave `tgs-zoom-mask-settings-production-8-v2` activa esta propuesta sin borrar los ajustes anteriores del navegador.
+Las siete entradas tienen ahora contornos propios en `app/transition-presets.json`. Se pueden afinar con «Ajustar máscaras» y recuperar por unión con «Restablecer». La clave `tgs-zoom-mask-settings-production-8-v3` activa esta propuesta sin borrar los ajustes anteriores del navegador.
 
 | Unión | Entrada propuesta | Tratamiento |
 | --- | --- | --- |
@@ -32,7 +32,25 @@ Las siete entradas tienen ahora contornos propios en `app/transition-presets.jso
 
 Las ilustraciones no se deforman en perspectiva ni se retocan: la forma pertenece a la máscara. Es una propuesta de composición para revisión artística, no una reconstrucción de las ilustraciones como escenas originalmente anidadas.
 
-En el último 12% de cada unión guiada, la apertura se amplía de forma continua para que la máscara estrecha no desaparezca de golpe cuando la imagen pasa a ser la base. Se mantiene un borde de imagen suavizado hasta el último tramo; en el punto de llegada la máscara es opaca. En libre, además se exige que la imagen cubra la pantalla: la apertura aumenta con un margen de cobertura del 8%, y vuelve al contorno original al desplazarse fuera de ella. Así, hacer zoom en otra dirección no abre un rectángulo sobre el fondo. No se animan las opacidades de las imágenes ni se cambia la trayectoria de cámara. Canvas reutiliza una sola superficie auxiliar de 512 × 288, sin ejecutar desenfoques ni crear superficies 4K por fotograma. El editor usa las mismas curvas de apertura, con máscaras CSS intersectadas.
+## Encuadre permanente y textos completos
+
+Solo se ofrece **Zoom libre** en la bienvenida. El modo guiado queda fuera de uso; no hay un control que lo active.
+
+Cada imagen se reduce proporcionalmente hasta caber entera en una zona completamente opaca de su máscara. El ajuste se calcula a partir del mismo contorno y los mismos tres pases de feather que usa Canvas, con margen adicional de dos píxeles en la máscara de 512 × 288. Las ubicaciones, tamaños de portal y puntos aprobados se conservan. Solo cambian la escala y el desplazamiento del contenido interior.
+
+El espacio restante es un reborde de composición: blanco para las escenas de fondo blanco, gris claro en la parábola y celeste en el lago. Se dibuja en la app, sin modificar o regenerar las imágenes ni sus textos. La ventana pequeña de la excavadora requiere acercarse más para leer; ningún texto se elimina para hacerla encajar. En un teléfono vertical se puede ampliar y desplazar horizontalmente para leer las carteleras.
+
+Se eliminó la apertura progresiva. La máscara no depende de la profundidad ni se transforma en un rectángulo al cruzar de nivel. El render aplica también los contornos de los ancestros tras cambiar el marco de coordenadas. Solo omite una operación cuando una comprobación de píxeles demuestra que esa máscara es completamente opaca sobre toda la pantalla: el contorno vuelve a aplicarse al desplazar la vista hacia su borde.
+
+El recorte técnico de las llamadas de dibujo al tamaño visible evita enviar coordenadas gigantes a Canvas en niveles profundos. Se conservan la precarga de tres niveles por delante, cuatro imágenes al inicio, y la composición por fotograma del modo libre.
+
+Para recalcular el encaje tras modificar los contornos:
+
+```powershell
+node scripts/fit-masks.mjs
+```
+
+También está disponible «Encajar imagen completa» en el editor. Los ajustes anteriores se conservan bajo sus claves anteriores; la versión v3 empieza con estos encajes. Cambiar a mano la escala del contenido puede volver a recortarlo: el botón permite restaurar un encaje seguro.
 
 Para generar una lámina de detalle de los encajes iniciales (no representa la animación ni es una captura del renderer):
 
@@ -41,9 +59,9 @@ node scripts/preview-masks.mjs
 node --test tests/mask-presets.test.mjs
 ```
 
-La lámina se guarda en `outputs/masks/mask-proof.png`, fuera de Git. Las pruebas comprueban contornos, áreas de texto protegidas, soporte central para el desenfoque y continuidad/reversibilidad de las curvas. La apariencia durante el movimiento se revisa aparte en el navegador.
+La lámina se guarda en `outputs/masks/mask-proof.png`, fuera de Git. Las pruebas verifican que las ubicaciones aprobadas no cambian y que el rectángulo completo de cada imagen queda dentro de píxeles opacos de la máscara, incluido el margen de seguridad. También verifican el cálculo de opacidad y la ausencia de apertura automática. La apariencia durante el movimiento se revisa aparte en el navegador.
 
-Se conservan el feather, los controles de ambos modos y sus políticas de precarga: secuencia completa antes de comenzar en guiado y ventana progresiva en libre. La geometría del visor sigue usando un lienzo 16:9 que cubre la pantalla; un teléfono vertical muestra una porción horizontal de la ilustración y permite explorarla con el zoom libre.
+Se conservan el feather y los controles manuales de desplazamiento y zoom, con carga progresiva. La geometría del visor sigue usando un lienzo 16:9 que cubre la pantalla; un teléfono vertical muestra una porción horizontal de la ilustración y permite explorarla con el zoom libre.
 
 ```powershell
 node --test tests/scene-assets.test.mjs

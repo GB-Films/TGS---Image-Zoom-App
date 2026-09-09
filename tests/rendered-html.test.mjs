@@ -60,7 +60,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.doesNotMatch(page, /setCurrentScene|transitionTimerRef/);
   assert.match(page, /Separá dos dedos para entrar/);
   assert.match(page, /Zoom libre/);
-  assert.match(page, /Zoom guiado/);
+  assert.doesNotMatch(page, /selectExperienceMode\("guided"\)/);
   assert.match(page, /cameraOverride/);
   assert.match(page, /renderBuffers/);
   assert.match(page, /alpha: !opaque/);
@@ -111,7 +111,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /fetchPriority=/);
   assert.match(page, /interpolateSpline/);
   assert.match(page, /CAMERA_TANGENT_STRENGTH = 0\.18/);
-  assert.match(page, /const strength = smoothing \/ 6/);
+  const geometry = await readFile(new URL("../app/mask-geometry.mjs", import.meta.url), "utf8");
+  assert.match(geometry, /const strength = smoothing \/ 6/);
   assert.match(page, /logViewScale/);
   assert.match(page, /function CanvasZoomRenderer/);
   assert.match(page, /DECODED_IMAGE_CACHE/);

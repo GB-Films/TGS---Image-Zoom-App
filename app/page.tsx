@@ -14,7 +14,7 @@ import {
   useState,
 } from "react";
 import productionTransitions from "./transition-presets.json";
-import { maskEdgeScale, maskOpeningScale, maskViewWeight } from "./mask-opening.mjs";
+import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
 
 export const dynamic = "force-static";
 
@@ -41,23 +41,13 @@ type TransitionSettings = {
   imageX: number;
   imageY: number;
   imageScale: number;
+  matte?: string;
   smoothing: number;
   feather: number;
   points: MaskPoint[];
 };
 
 type MaskStyle = Pick<TransitionSettings, "points" | "smoothing" | "feather">;
-const IMAGE_EDGE_MASK: MaskStyle = {
-  points: [{ x: 0.04, y: 0.04 }, { x: 0.96, y: 0.04 }, { x: 0.96, y: 0.96 }, { x: 0.04, y: 0.96 }],
-  smoothing: 0,
-  feather: 30,
-};
-const OPAQUE_MASK: MaskStyle = {
-  points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
-  smoothing: 0,
-  feather: 0,
-};
-
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
 
@@ -74,7 +64,7 @@ const SCENES = [
 
 const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
-const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v2";
+const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v3";
 const ARTWORK_ASPECT_RATIO = 16 / 9;
 const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
@@ -92,6 +82,7 @@ const MAX_CONCURRENT_DECODES = 2;
 const DECODE_WAITERS: Array<() => void> = [];
 let decodesInFlight = 0;
 const CANVAS_MASK_CACHE = new Map<string, HTMLCanvasElement>();
+const MASK_OPAQUE_CACHE = new WeakMap<HTMLCanvasElement, ReturnType<typeof opaqueIntegral>>();
 const CANVAS_REBASE_DELAY = 0.4;
 const CAMERA_TANGENT_STRENGTH = 0.18;
 
@@ -233,6 +224,7 @@ const createDefaultTransitions = (): TransitionSettings[] =>
     imageX: preset.imageX,
     imageY: preset.imageY,
     imageScale: preset.imageScale,
+    matte: preset.matte,
     smoothing: preset.smoothing,
     feather: preset.feather,
     points: clonePoints(preset.points),
@@ -261,41 +253,6 @@ const interpolateSpline = (
     (-2 * progressCubed + 3 * progressSquared) * end +
     (progressCubed - progressSquared) * endTangent
   );
-};
-
-const buildClosedPath = (points: MaskPoint[], smoothing: number, size = 1000) => {
-  if (points.length < 3) return "";
-  const scaled = points.map((point) => ({ x: point.x * size, y: point.y * size }));
-
-  if (smoothing <= 0.01) {
-    return `${scaled.map((point, index) =>
-      `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
-    ).join(" ")} Z`;
-  }
-
-  const commands = [`M ${scaled[0].x.toFixed(2)} ${scaled[0].y.toFixed(2)}`];
-  for (let index = 0; index < scaled.length; index += 1) {
-    const previous = scaled[(index - 1 + scaled.length) % scaled.length];
-    const current = scaled[index];
-    const next = scaled[(index + 1) % scaled.length];
-    const afterNext = scaled[(index + 2) % scaled.length];
-    const strength = smoothing / 6;
-    const controlOne = {
-      x: current.x + (next.x - previous.x) * strength,
-      y: current.y + (next.y - previous.y) * strength,
-    };
-    const controlTwo = {
-      x: next.x - (afterNext.x - current.x) * strength,
-      y: next.y - (afterNext.y - current.y) * strength,
-    };
-
-    commands.push(
-      `C ${controlOne.x.toFixed(2)} ${controlOne.y.toFixed(2)} ` +
-        `${controlTwo.x.toFixed(2)} ${controlTwo.y.toFixed(2)} ` +
-        `${next.x.toFixed(2)} ${next.y.toFixed(2)}`,
-    );
-  }
-  return `${commands.join(" ")} Z`;
 };
 
 const createMaskImage = (settings: MaskStyle) => {
@@ -427,62 +384,6 @@ const calculateCanonicalCameraAtDepth = (transitions: TransitionSettings[], dept
   );
 };
 
-const blurMaskAlpha = (
-  pixels: ImageData,
-  width: number,
-  height: number,
-  radius: number,
-) => {
-  if (radius < 1) return;
-  const source = new Uint8ClampedArray(width * height);
-  const temporary = new Uint8ClampedArray(width * height);
-  for (let index = 0; index < source.length; index += 1) {
-    source[index] = pixels.data[index * 4 + 3];
-  }
-
-  const horizontalPass = (input: Uint8ClampedArray, output: Uint8ClampedArray) => {
-    const diameter = radius * 2 + 1;
-    for (let y = 0; y < height; y += 1) {
-      const row = y * width;
-      let sum = 0;
-      for (let offset = -radius; offset <= radius; offset += 1) {
-        sum += input[row + clamp(offset, 0, width - 1)];
-      }
-      for (let x = 0; x < width; x += 1) {
-        output[row + x] = Math.round(sum / diameter);
-        sum -= input[row + clamp(x - radius, 0, width - 1)];
-        sum += input[row + clamp(x + radius + 1, 0, width - 1)];
-      }
-    }
-  };
-
-  const verticalPass = (input: Uint8ClampedArray, output: Uint8ClampedArray) => {
-    const diameter = radius * 2 + 1;
-    for (let x = 0; x < width; x += 1) {
-      let sum = 0;
-      for (let offset = -radius; offset <= radius; offset += 1) {
-        sum += input[clamp(offset, 0, height - 1) * width + x];
-      }
-      for (let y = 0; y < height; y += 1) {
-        output[y * width + x] = Math.round(sum / diameter);
-        sum -= input[clamp(y - radius, 0, height - 1) * width + x];
-        sum += input[clamp(y + radius + 1, 0, height - 1) * width + x];
-      }
-    }
-  };
-
-  for (let pass = 0; pass < 3; pass += 1) {
-    horizontalPass(source, temporary);
-    verticalPass(temporary, source);
-  }
-  for (let index = 0; index < source.length; index += 1) {
-    pixels.data[index * 4] = 255;
-    pixels.data[index * 4 + 1] = 255;
-    pixels.data[index * 4 + 2] = 255;
-    pixels.data[index * 4 + 3] = source[index];
-  }
-};
-
 const getCanvasMask = (settings: MaskStyle, featherOverride?: number) => {
   const feather = featherOverride ?? settings.feather;
   const cacheKey = JSON.stringify([settings.smoothing, feather, settings.points]);
@@ -513,47 +414,26 @@ const getCanvasMask = (settings: MaskStyle, featherOverride?: number) => {
     const oldestKey = CANVAS_MASK_CACHE.keys().next().value;
     if (oldestKey) CANVAS_MASK_CACHE.delete(oldestKey);
   }
+  MASK_OPAQUE_CACHE.set(canvas, opaqueIntegral(context.getImageData(0, 0, width, height).data, width, height));
   CANVAS_MASK_CACHE.set(cacheKey, canvas);
   return canvas;
 };
 
-let openingMaskCache: {
-  canvas: HTMLCanvasElement;
-  source: HTMLCanvasElement | null;
-  opening: number;
-  edgeScale: number;
-} | null = null;
-
-const getOpeningCanvasMask = (settings: TransitionSettings, depth: number, level: number, viewWeight = 1) => {
-  const opening = maskOpeningScale(depth, level, viewWeight);
-  if (opening >= 16) return getCanvasMask(OPAQUE_MASK);
-  const source = getCanvasMask(settings);
-  if (opening <= 1) return source;
-  const edgeScale = maskEdgeScale(depth, level, viewWeight);
-  if (!openingMaskCache) {
-    const canvas = document.createElement("canvas");
-    canvas.width = source.width;
-    canvas.height = source.height;
-    openingMaskCache = { canvas, source: null, opening: 0, edgeScale: 0 };
-  }
-  const cache = openingMaskCache;
-  if (cache.source === source && cache.opening === opening && cache.edgeScale === edgeScale) return cache.canvas;
-  const context = cache.canvas.getContext("2d");
-  if (!context) return source;
-  const { width, height } = cache.canvas;
-  const sample = (mask: HTMLCanvasElement, scale: number) => context.drawImage(
-    mask, mask.width * (1 - 1 / scale) / 2, mask.height * (1 - 1 / scale) / 2,
-    mask.width / scale, mask.height / scale, 0, 0, width, height,
-  );
-  // Reuse one 512×288 surface; no per-frame blur or full-resolution buffer.
-  context.globalCompositeOperation = "copy";
-  sample(source, opening);
-  context.globalCompositeOperation = "destination-in";
-  sample(getCanvasMask(IMAGE_EDGE_MASK), edgeScale);
-  cache.source = source;
-  cache.opening = opening;
-  cache.edgeScale = edgeScale;
-  return cache.canvas;
+// Crop the source to the viewport before drawing: deep zoom can otherwise pass
+// enormous destination coordinates to the canvas implementation.
+const drawClippedImage = (
+  context: CanvasRenderingContext2D, image: DecodedScene | HTMLCanvasElement,
+  left: number, top: number, width: number, height: number,
+  viewportWidth: number, viewportHeight: number,
+) => {
+  const x = Math.max(0, left), y = Math.max(0, top);
+  const right = Math.min(viewportWidth, left + width);
+  const bottom = Math.min(viewportHeight, top + height);
+  if (right <= x || bottom <= y) return false;
+  context.drawImage(image, (x - left) / width * image.width, (y - top) / height * image.height,
+    (right - x) / width * image.width, (bottom - y) / height * image.height,
+    x, y, right - x, bottom - y);
+  return true;
 };
 
 function CanvasZoomRenderer({
@@ -717,21 +597,30 @@ function CanvasZoomRenderer({
         if (layerWidth < 1 || layerHeight < 1) continue;
         const layerCenterX = toScreenX(placement.centerX);
         const layerCenterY = toScreenY(placement.centerY);
-        layerContext.drawImage(
-          image,
-          layerCenterX - layerWidth / 2,
-          layerCenterY - layerHeight / 2,
-          layerWidth,
-          layerHeight,
-        );
+        // Keep the whole source image in its fitted rectangle. The extra border
+        // belongs to the fixed parent aperture, not to an enlarged child image.
+        const parent = camera.placements[layer - 1];
+        const entry = transitions[layer - 1];
+        if (parent && entry) {
+          const pw = artworkWidth * camera.viewScale * parent.scale * entry.portalScale / 100 * pixelRatio;
+          const ph = artworkHeight * camera.viewScale * parent.scale * entry.portalScale / 100 * pixelRatio;
+          const px = toScreenX(parent.centerX + parent.scale * (entry.portalX / 100 - 0.5)) - pw / 2;
+          const py = toScreenY(parent.centerY + parent.scale * (entry.portalY / 100 - 0.5)) - ph / 2;
+          layerContext.fillStyle = entry.matte ?? "#ffffff";
+          layerContext.fillRect(Math.max(0, px), Math.max(0, py),
+            Math.max(0, Math.min(renderWidth, px + pw) - Math.max(0, px)),
+            Math.max(0, Math.min(renderHeight, py + ph) - Math.max(0, py)));
+        }
+        drawClippedImage(layerContext, image, layerCenterX - layerWidth / 2,
+          layerCenterY - layerHeight / 2, layerWidth, layerHeight, renderWidth, renderHeight);
 
-        if (layer > bufferAnchor) {
+        if (layer > 0) {
           maskContext.setTransform(1, 0, 0, 1, 0, 0);
           maskContext.clearRect(0, 0, renderWidth, renderHeight);
           maskContext.globalAlpha = 1;
           let maskDrawn = false;
 
-          for (let transitionLevel = bufferAnchor; transitionLevel < layer; transitionLevel += 1) {
+          for (let transitionLevel = 0; transitionLevel < layer; transitionLevel += 1) {
             const parentPlacement = camera.placements[transitionLevel];
             const transition = transitions[transitionLevel];
             if (!parentPlacement || !transition) continue;
@@ -749,20 +638,22 @@ function CanvasZoomRenderer({
               artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
             const portalScreenX = toScreenX(portalCenterX);
             const portalScreenY = toScreenY(portalCenterY);
-            const viewWeight = cameraOverride ? maskViewWeight(
-              portalScreenX - portalWidth / 2, portalScreenY - portalHeight / 2,
-              portalWidth, portalHeight, renderWidth, renderHeight,
-            ) : 1;
-            const mask = getOpeningCanvasMask(transition, depth, transitionLevel, viewWeight);
-
+            const mask = getCanvasMask(transition);
+            const left = portalScreenX - portalWidth / 2;
+            const top = portalScreenY - portalHeight / 2;
+            const integral = MASK_OPAQUE_CACHE.get(mask);
+            // Skipping a fully opaque mask is only an optimization. Rebase/depth
+            // never removes a contour; panning back to its edge applies it again.
+            if (integral && opaqueRectangle(integral,
+              -left / portalWidth * mask.width - 2, -top / portalHeight * mask.height - 2,
+              (renderWidth - left) / portalWidth * mask.width + 2,
+              (renderHeight - top) / portalHeight * mask.height + 2)) continue;
             maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
-            maskContext.drawImage(
-              mask,
-              portalScreenX - portalWidth / 2,
-              portalScreenY - portalHeight / 2,
-              portalWidth,
-              portalHeight,
-            );
+            if (!drawClippedImage(maskContext, mask, left, top, portalWidth, portalHeight, renderWidth, renderHeight)) {
+              maskContext.clearRect(0, 0, renderWidth, renderHeight);
+              maskDrawn = true;
+              break;
+            }
             maskDrawn = true;
           }
 
@@ -957,7 +848,6 @@ function ZoomLayer({
   maskIsDragging,
   onMaskDragChange,
   onMovePortal,
-  maskViewWeights,
 }: {
   level: number;
   transitions: TransitionSettings[];
@@ -970,17 +860,15 @@ function ZoomLayer({
   maskIsDragging: boolean;
   onMaskDragChange: (dragging: boolean) => void;
   onMovePortal: (deltaX: number, deltaY: number) => void;
-  maskViewWeights?: number[];
 }) {
   const scene = SCENES[ZOOM_SEQUENCE[level]];
   const hasNextLayer =
     level < MAX_DEPTH && level <= Math.floor(depth) + RENDER_AHEAD_LEVELS - 1;
   const transition = transitions[level];
   const isLiveEditing = editingTransition === level && maskIsDragging;
-  const maskIsVisible = level >= Math.floor(depth) - 1 || editingTransition === level;
   const maskImage = useMemo(
-    () => (hasNextLayer && transition && maskIsVisible && !isLiveEditing ? createMaskImage(transition) : "none"),
-    [hasNextLayer, isLiveEditing, maskIsVisible, transition],
+    () => (hasNextLayer && transition && !isLiveEditing ? createMaskImage(transition) : "none"),
+    [hasNextLayer, isLiveEditing, transition],
   );
 
   const portalStyle: CSSProperties | undefined = transition
@@ -990,20 +878,10 @@ function ZoomLayer({
         transform: `translate3d(-50%, -50%, 0) scale(${transition.portalScale / 100})`,
       }
     : undefined;
-  const opening = maskOpeningScale(depth, level, maskViewWeights?.[level] ?? 1);
-  const edgeOpening = maskEdgeScale(depth, level, maskViewWeights?.[level] ?? 1);
-  const edgeImage = createMaskImage(opening > 1 && opening < 16 ? IMAGE_EDGE_MASK : OPAQUE_MASK);
-  const maskStyle: CSSProperties | undefined = transition && (isLiveEditing || maskImage !== "none")
+  const maskStyle: CSSProperties | undefined = transition
     ? isLiveEditing
       ? { clipPath: `polygon(${transition.points.map((point) => `${point.x * 100}% ${point.y * 100}%`).join(", ")})` }
-      : {
-          WebkitMaskImage: `${maskImage}, ${edgeImage}`,
-          maskImage: `${maskImage}, ${edgeImage}`,
-          WebkitMaskSize: `${opening * 100}% ${opening * 100}%, ${edgeOpening * 100}% ${edgeOpening * 100}%`,
-          maskSize: `${opening * 100}% ${opening * 100}%, ${edgeOpening * 100}% ${edgeOpening * 100}%`,
-          WebkitMaskPosition: "center", maskPosition: "center",
-          WebkitMaskComposite: "source-in", maskComposite: "intersect",
-        }
+      : { WebkitMaskImage: maskImage, maskImage }
     : undefined;
   const contentStyle: CSSProperties | undefined = transition
     ? {
@@ -1022,7 +900,7 @@ function ZoomLayer({
 
       {hasNextLayer && transition ? (
         <div className="zoom-portal" style={portalStyle}>
-          <div className="zoom-portal__mask" style={maskStyle}>
+          <div className="zoom-portal__mask" style={{ ...maskStyle, backgroundColor: transition.matte ?? "#ffffff" }}>
             <div className="zoom-portal__content" style={contentStyle}>
               <ZoomLayer
                 level={level + 1}
@@ -1036,7 +914,6 @@ function ZoomLayer({
                 maskIsDragging={maskIsDragging}
                 onMaskDragChange={onMaskDragChange}
                 onMovePortal={onMovePortal}
-                maskViewWeights={maskViewWeights}
               />
             </div>
           </div>
@@ -1094,7 +971,7 @@ export default function Home() {
 
   const [assetsReady, setAssetsReady] = useState(false);
   const [started, setStarted] = useState(false);
-  const [experienceMode, setExperienceMode] = useState<ExperienceMode>("manual");
+  const [experienceMode] = useState<ExperienceMode>("manual");
   const [depth, setDepth] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [developerMode, setDeveloperMode] = useState(false);
@@ -1296,6 +1173,7 @@ export default function Home() {
               imageX: transition.imageX,
               imageY: transition.imageY,
               imageScale: transition.imageScale,
+              matte: transition.matte ?? "#ffffff",
               smoothing: transition.smoothing,
               feather: transition.feather ?? 24,
               points: transition.points,
@@ -1355,12 +1233,6 @@ export default function Home() {
     });
   };
 
-  const frameTransition = useCallback((index: number) => {
-    setEditingTransition(index);
-    setSelectedPoint(0);
-    commitDepth(Math.min(index + 0.45, MAX_DEPTH));
-  }, [commitDepth]);
-
   const setManualCameraPosition = useCallback((x: number, y: number, viewScale = manualBaseViewScale) => {
     const safeScale = Math.max(viewScale, 0.001);
     const horizontalReach = clamp(viewport.width / (2 * canvasWidth * safeScale), 0, 0.5);
@@ -1379,11 +1251,19 @@ export default function Home() {
     setManualCameraPosition(0.5, 0.5, 1);
   }, [setManualCameraPosition]);
 
-  const selectExperienceMode = (mode: ExperienceMode) => {
-    if (mode !== experienceMode) setAssetsReady(false);
-    setExperienceMode(mode);
-    resetManualCamera();
-  };
+  const frameTransition = useCallback((index: number) => {
+    setEditingTransition(index);
+    setSelectedPoint(0);
+    const targetDepth = Math.min(index + 0.45, MAX_DEPTH);
+    const parent = calculateLayerPlacements(transitions, 0)[index];
+    const entry = transitions[index];
+    if (parent && entry) {
+      setManualCameraPosition(parent.centerX + parent.scale * (entry.portalX / 100 - 0.5),
+        parent.centerY + parent.scale * (entry.portalY / 100 - 0.5),
+        calculateCanonicalCameraAtDepth(transitions, targetDepth).viewScale);
+    }
+    commitDepth(targetDepth);
+  }, [commitDepth, setManualCameraPosition, transitions]);
 
   const startExperience = () => {
     if (!assetsReady) return;
@@ -1539,7 +1419,7 @@ export default function Home() {
   const level = Math.min(Math.floor(depth), MAX_DEPTH);
   // Guided zoom promotes every completed image to an opaque base immediately.
   // Manual zoom keeps the delayed rebase that stabilizes free camera movement.
-  const anchorLevel = experienceMode === "guided"
+  const anchorLevel = developerMode ? 0 : experienceMode === "guided"
     ? level
     : Math.max(
         0,
@@ -1612,22 +1492,6 @@ export default function Home() {
   const editorOffsetX = developerMode && workspaceShifted && viewport.width >= 680
     ? -(panelWidth / 2 + 12)
     : 0;
-  const editorMaskViewWeights = developerMode && experienceMode === "manual"
-    ? transitions.map((transition, index) => {
-        const placement = activeCamera.placements[index];
-        if (!placement) return 0;
-        const scale = transition.portalScale / 100;
-        const width = canvasWidth * viewScale * placement.scale * scale;
-        const height = canvasHeight * viewScale * placement.scale * scale;
-        const x = placement.centerX + placement.scale * (transition.portalX / 100 - 0.5);
-        const y = placement.centerY + placement.scale * (transition.portalY / 100 - 0.5);
-        return maskViewWeight(
-          viewport.width / 2 + (x - displayCameraX) * canvasWidth * viewScale + editorOffsetX - width / 2,
-          viewport.height / 2 + (y - displayCameraY) * canvasHeight * viewScale - height / 2,
-          width, height, viewport.width, viewport.height,
-        );
-      })
-    : undefined;
   const canvasStyle: CSSProperties = { width: canvasWidth, height: canvasHeight };
   const activeTransition = transitions[editingTransition];
   const editingPlacement =
@@ -1690,19 +1554,11 @@ export default function Home() {
               <img className="brand-logo" src={publicAsset("/brand/tgs-logo-color.svg")} alt="TGS"
                 width="500" height="185" draggable="false" />
             </div></div>
-            <div className="experience-choice" role="group" aria-label="Elegir experiencia">
-              <button className={`experience-choice__option${experienceMode === "manual" ? " experience-choice__option--selected" : ""}`}
-                type="button" onClick={() => selectExperienceMode("manual")}
-                aria-pressed={experienceMode === "manual"}>
+            <div className="experience-choice" aria-label="Experiencia disponible">
+              <div className="experience-choice__option experience-choice__option--selected">
                 <span className="experience-choice__icon" aria-hidden="true">✦</span>
-                <span><strong>Zoom libre</strong><small>Elegí la dirección con el cursor o tus dedos</small></span>
-              </button>
-              <button className={`experience-choice__option${experienceMode === "guided" ? " experience-choice__option--selected" : ""}`}
-                type="button" onClick={() => selectExperienceMode("guided")}
-                aria-pressed={experienceMode === "guided"}>
-                <span className="experience-choice__icon" aria-hidden="true">◌</span>
-                <span><strong>Zoom guiado</strong><small>Recorré la secuencia visual automática</small></span>
-              </button>
+                <span><strong>Zoom libre</strong><small>Elegí la dirección y acercate para leer cada imagen</small></span>
+              </div>
             </div>
             <button className="start-button" type="button" onClick={startExperience}
               disabled={!assetsReady} aria-busy={!assetsReady}>
@@ -1768,7 +1624,7 @@ export default function Home() {
                   onMovePoint={moveMaskPoint} editorHandleScale={editorHandleScale}
                   depth={depth} maskIsDragging={isActiveBuffer && maskIsDragging}
                   onMaskDragChange={handleMaskDragChange}
-                  onMovePortal={movePortalByPixels} maskViewWeights={editorMaskViewWeights} />
+                  onMovePortal={movePortalByPixels} />
               </div>
             </div>
           );
@@ -1860,12 +1716,18 @@ export default function Home() {
 
             <section className="editor-section">
               <div className="editor-section__title"><h3>Imagen insertada</h3></div>
+              <p>La imagen completa queda dentro del contorno fijo. El reborde recibe el feather, sin recortar los textos.</p>
+              <button type="button" onClick={() => {
+                const mask = getCanvasMask(activeTransition);
+                const integral = MASK_OPAQUE_CACHE.get(mask);
+                if (integral) updateTransition(fitImageInsideMask(integral));
+              }}>Encajar imagen completa</button>
               <EditorRange label="Posición horizontal" value={activeTransition.imageX}
                 min={-50} max={50} step={1} suffix="%" onChange={(imageX) => updateTransition({ imageX })} />
               <EditorRange label="Posición vertical" value={activeTransition.imageY}
                 min={-50} max={50} step={1} suffix="%" onChange={(imageY) => updateTransition({ imageY })} />
               <EditorRange label="Escala" value={activeTransition.imageScale}
-                min={0.5} max={2} step={0.01} suffix="×" onChange={(imageScale) => updateTransition({ imageScale })} />
+                min={0.05} max={2} step={0.005} suffix="×" onChange={(imageScale) => updateTransition({ imageScale })} />
             </section>
 
             <details className="editor-advanced">

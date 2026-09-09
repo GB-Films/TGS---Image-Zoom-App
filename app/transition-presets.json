@@ -1,83 +1,300 @@
 [
   {
     "name": "Tapa del cuaderno sobre la mesa",
-    "portalX": 33.3, "portalY": 94.8, "portalScale": 10,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.03, "feather": 5,
+    "portalX": 33.3,
+    "portalY": 94.8,
+    "portalScale": 10,
+    "imageX": -0.68359375,
+    "imageY": 0.868055555555558,
+    "imageScale": 0.322265625,
+    "smoothing": 0.03,
+    "feather": 5,
     "points": [
-      { "x": 0.08, "y": 0.57 }, { "x": 0.44, "y": 0.18 },
-      { "x": 0.91, "y": 0.44 }, { "x": 0.54, "y": 0.84 }
-    ]
+      {
+        "x": 0.08,
+        "y": 0.57
+      },
+      {
+        "x": 0.44,
+        "y": 0.18
+      },
+      {
+        "x": 0.91,
+        "y": 0.44
+      },
+      {
+        "x": 0.54,
+        "y": 0.84
+      }
+    ],
+    "matte": "#ffffff"
   },
   {
     "name": "Reflejo en la parte superior del casco",
-    "portalX": 30.2, "portalY": 40.3, "portalScale": 12,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.65, "feather": 28,
+    "portalX": 30.2,
+    "portalY": 40.3,
+    "portalScale": 12,
+    "imageX": -0.87890625,
+    "imageY": 6.7708333333333375,
+    "imageScale": 0.232421875,
+    "smoothing": 0.65,
+    "feather": 28,
     "points": [
-      { "x": 0.38, "y": 0.30 }, { "x": 0.62, "y": 0.31 },
-      { "x": 0.79, "y": 0.45 }, { "x": 0.79, "y": 0.66 },
-      { "x": 0.65, "y": 0.81 }, { "x": 0.38, "y": 0.83 },
-      { "x": 0.21, "y": 0.68 }, { "x": 0.24, "y": 0.44 }
-    ]
+      {
+        "x": 0.38,
+        "y": 0.3
+      },
+      {
+        "x": 0.62,
+        "y": 0.31
+      },
+      {
+        "x": 0.79,
+        "y": 0.45
+      },
+      {
+        "x": 0.79,
+        "y": 0.66
+      },
+      {
+        "x": 0.65,
+        "y": 0.81
+      },
+      {
+        "x": 0.38,
+        "y": 0.83
+      },
+      {
+        "x": 0.21,
+        "y": 0.68
+      },
+      {
+        "x": 0.24,
+        "y": 0.44
+      }
+    ],
+    "matte": "#ffffff"
   },
   {
     "name": "Pantalla del monitor derecho de la Bolsa",
-    "portalX": 83.4, "portalY": 57.1, "portalScale": 13.5,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.02, "feather": 5,
+    "portalX": 83.4,
+    "portalY": 57.1,
+    "portalScale": 13.5,
+    "imageX": 0,
+    "imageY": -0.347222222222221,
+    "imageScale": 0.4765625,
+    "smoothing": 0.02,
+    "feather": 5,
     "points": [
-      { "x": 0.20, "y": 0.14 }, { "x": 0.75, "y": 0.12 },
-      { "x": 0.80, "y": 0.87 }, { "x": 0.25, "y": 0.87 }
-    ]
+      {
+        "x": 0.2,
+        "y": 0.14
+      },
+      {
+        "x": 0.75,
+        "y": 0.12
+      },
+      {
+        "x": 0.8,
+        "y": 0.87
+      },
+      {
+        "x": 0.25,
+        "y": 0.87
+      }
+    ],
+    "matte": "#ffffff"
   },
   {
     "name": "Ventana de la excavadora junto al ducto",
-    "portalX": 35.5, "portalY": 69.8, "portalScale": 3.5,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.02, "feather": 4,
+    "portalX": 35.5,
+    "portalY": 69.8,
+    "portalScale": 3.5,
+    "imageX": -0.1953125,
+    "imageY": -1.909722222222221,
+    "imageScale": 0.23828125,
+    "smoothing": 0.02,
+    "feather": 4,
     "points": [
-      { "x": 0.36, "y": 0.33 }, { "x": 0.68, "y": 0.30 },
-      { "x": 0.61, "y": 0.76 }, { "x": 0.36, "y": 0.73 }
-    ]
+      {
+        "x": 0.36,
+        "y": 0.33
+      },
+      {
+        "x": 0.68,
+        "y": 0.3
+      },
+      {
+        "x": 0.61,
+        "y": 0.76
+      },
+      {
+        "x": 0.36,
+        "y": 0.73
+      }
+    ],
+    "matte": "#ffffff"
   },
   {
     "name": "Apertura de cielo entre las torres de Cerri",
-    "portalX": 38.5, "portalY": 51.5, "portalScale": 23,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.7, "feather": 42,
+    "portalX": 38.5,
+    "portalY": 51.5,
+    "portalScale": 23,
+    "imageX": -0.48828125,
+    "imageY": -1.3888888888888895,
+    "imageScale": 0.302734375,
+    "smoothing": 0.7,
+    "feather": 42,
     "points": [
-      { "x": 0.25, "y": 0.16 }, { "x": 0.46, "y": 0.09 },
-      { "x": 0.75, "y": 0.16 }, { "x": 0.87, "y": 0.38 },
-      { "x": 0.80, "y": 0.58 }, { "x": 0.87, "y": 0.77 },
-      { "x": 0.60, "y": 0.89 }, { "x": 0.37, "y": 0.84 },
-      { "x": 0.16, "y": 0.90 }, { "x": 0.10, "y": 0.65 },
-      { "x": 0.16, "y": 0.46 }, { "x": 0.11, "y": 0.29 }
-    ]
+      {
+        "x": 0.25,
+        "y": 0.16
+      },
+      {
+        "x": 0.46,
+        "y": 0.09
+      },
+      {
+        "x": 0.75,
+        "y": 0.16
+      },
+      {
+        "x": 0.87,
+        "y": 0.38
+      },
+      {
+        "x": 0.8,
+        "y": 0.58
+      },
+      {
+        "x": 0.87,
+        "y": 0.77
+      },
+      {
+        "x": 0.6,
+        "y": 0.89
+      },
+      {
+        "x": 0.37,
+        "y": 0.84
+      },
+      {
+        "x": 0.16,
+        "y": 0.9
+      },
+      {
+        "x": 0.1,
+        "y": 0.65
+      },
+      {
+        "x": 0.16,
+        "y": 0.46
+      },
+      {
+        "x": 0.11,
+        "y": 0.29
+      }
+    ],
+    "matte": "#ffffff"
   },
   {
     "name": "Interior de la parábola de Telcosur",
-    "portalX": 83.3, "portalY": 31.5, "portalScale": 19,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.8, "feather": 9,
+    "portalX": 83.3,
+    "portalY": 31.5,
+    "portalScale": 19,
+    "imageX": -1.7578125,
+    "imageY": 3.993055555555558,
+    "imageScale": 0.24609375,
+    "smoothing": 0.8,
+    "feather": 9,
     "points": [
-      { "x": 0.50, "y": 0.10 }, { "x": 0.64, "y": 0.18 },
-      { "x": 0.69, "y": 0.42 }, { "x": 0.62, "y": 0.73 },
-      { "x": 0.49, "y": 0.93 }, { "x": 0.35, "y": 0.89 },
-      { "x": 0.29, "y": 0.68 }, { "x": 0.34, "y": 0.36 }
-    ]
+      {
+        "x": 0.5,
+        "y": 0.1
+      },
+      {
+        "x": 0.64,
+        "y": 0.18
+      },
+      {
+        "x": 0.69,
+        "y": 0.42
+      },
+      {
+        "x": 0.62,
+        "y": 0.73
+      },
+      {
+        "x": 0.49,
+        "y": 0.93
+      },
+      {
+        "x": 0.35,
+        "y": 0.89
+      },
+      {
+        "x": 0.29,
+        "y": 0.68
+      },
+      {
+        "x": 0.34,
+        "y": 0.36
+      }
+    ],
+    "matte": "#edf0ec"
   },
   {
     "name": "Agua del lago hacia el mar de Magallanes",
-    "portalX": 63, "portalY": 29.7, "portalScale": 25,
-    "imageX": 0, "imageY": 0, "imageScale": 1,
-    "smoothing": 0.6, "feather": 20,
+    "portalX": 63,
+    "portalY": 29.7,
+    "portalScale": 25,
+    "imageX": 15.625,
+    "imageY": -3.125,
+    "imageScale": 0.2421875,
+    "smoothing": 0.6,
+    "feather": 20,
     "points": [
-      { "x": 0.13, "y": 0.28 }, { "x": 0.33, "y": 0.22 },
-      { "x": 0.56, "y": 0.25 }, { "x": 0.82, "y": 0.22 },
-      { "x": 0.91, "y": 0.42 }, { "x": 0.84, "y": 0.67 },
-      { "x": 0.62, "y": 0.72 }, { "x": 0.39, "y": 0.64 },
-      { "x": 0.18, "y": 0.73 }, { "x": 0.09, "y": 0.51 }
-    ]
+      {
+        "x": 0.13,
+        "y": 0.28
+      },
+      {
+        "x": 0.33,
+        "y": 0.22
+      },
+      {
+        "x": 0.56,
+        "y": 0.25
+      },
+      {
+        "x": 0.82,
+        "y": 0.22
+      },
+      {
+        "x": 0.91,
+        "y": 0.42
+      },
+      {
+        "x": 0.84,
+        "y": 0.67
+      },
+      {
+        "x": 0.62,
+        "y": 0.72
+      },
+      {
+        "x": 0.39,
+        "y": 0.64
+      },
+      {
+        "x": 0.18,
+        "y": 0.73
+      },
+      {
+        "x": 0.09,
+        "y": 0.51
+      }
+    ],
+    "matte": "#6fc5e3"
   }
 ]

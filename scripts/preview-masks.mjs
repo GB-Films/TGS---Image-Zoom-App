@@ -2,6 +2,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { buildClosedPath } from "../app/mask-geometry.mjs";
 
 const root = process.cwd();
 const presets = JSON.parse(await readFile(path.join(root, "app/transition-presets.json"), "utf8"));
@@ -11,17 +12,6 @@ const sources = [...page.matchAll(/src: publicAsset\("(\/scenes\/tgs-[^"]+)"\)/g
 const output = path.join(root, "outputs/masks");
 await mkdir(output, { recursive: true });
 
-function maskPath(points, smoothing) {
-  const p = points.map(({ x, y }) => ({ x: x * 1000, y: y * 1000 }));
-  const commands = [`M ${p[0].x} ${p[0].y}`];
-  for (let i = 0; i < p.length; i++) {
-    const prev = p[(i - 1 + p.length) % p.length];
-    const cur = p[i], next = p[(i + 1) % p.length], after = p[(i + 2) % p.length];
-    const k = smoothing / 6;
-    commands.push(`C ${cur.x + (next.x - prev.x) * k} ${cur.y + (next.y - prev.y) * k} ${next.x - (after.x - cur.x) * k} ${next.y - (after.y - cur.y) * k} ${next.x} ${next.y}`);
-  }
-  return commands.join(" ") + " Z";
-}
 
 const tiles = [];
 for (const [index, preset] of presets.entries()) {
@@ -29,10 +19,16 @@ for (const [index, preset] of presets.entries()) {
   const height = Math.round(2160 * preset.portalScale / 100);
   const left = Math.round(3840 * preset.portalX / 100 - width / 2);
   const top = Math.round(2160 * preset.portalY / 100 - height / 2);
-  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><filter id="f" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${preset.feather}"/></filter></defs><path d="${maskPath(preset.points, preset.smoothing)}" fill="white" filter="url(#f)"/></svg>`);
-  const child = await sharp(sources[index + 1]).resize(width, height).ensureAlpha()
-    .composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
-  const composite = await sharp(sources[index]).composite([{ input: child, left, top }]).png().toBuffer();
+  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><filter id="f" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${preset.feather}"/></filter></defs><path d="${buildClosedPath(preset.points, preset.smoothing)}" fill="white" filter="url(#f)"/></svg>`);
+  const imageWidth = Math.max(1, Math.round(width * preset.imageScale));
+  const imageHeight = Math.max(1, Math.round(height * preset.imageScale));
+  const fitted = await sharp(sources[index + 1]).resize(imageWidth, imageHeight).png().toBuffer();
+  const child = await sharp({ create: { width, height, channels: 4, background: preset.matte ?? "#ffffff" } })
+    .composite([{ input: fitted,
+      left: Math.round(width * (0.5 + preset.imageX / 100) - imageWidth / 2),
+      top: Math.round(height * (0.5 + preset.imageY / 100) - imageHeight / 2) }]).png().toBuffer();
+  const maskedChild = await sharp(child).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+  const composite = await sharp(sources[index]).composite([{ input: maskedChild, left, top }]).png().toBuffer();
   const cropWidth = Math.min(3840, Math.max(900, width * 2));
   const cropHeight = Math.round(cropWidth * 9 / 16);
   const cropLeft = Math.max(0, Math.min(3840 - cropWidth, Math.round(left + width / 2 - cropWidth / 2)));

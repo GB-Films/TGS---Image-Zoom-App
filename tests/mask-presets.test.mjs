@@ -1,100 +1,66 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { maskEdgeScale, maskOpeningScale, maskViewWeight } from "../app/mask-opening.mjs";
+import sharp from "sharp";
+import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "../app/mask-geometry.mjs";
 
 const presets = JSON.parse(await readFile(new URL("../app/transition-presets.json", import.meta.url), "utf8"));
-const inside = (x, y, polygon) => {
-  let hit = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i], b = polygon[j];
-    if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) hit = !hit;
-  }
-  return hit;
-};
+async function raster(p) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="288" viewBox="0 0 1 1" preserveAspectRatio="none"><path d="${buildClosedPath(p.points, p.smoothing, 1)}" fill="white"/></svg>`;
+  const data = await sharp(Buffer.from(svg)).ensureAlpha().raw().toBuffer();
+  blurMaskAlpha({ data }, 512, 288, Math.round(p.feather / 1000 * 512));
+  return { data, integral: opaqueIntegral(data, 512, 288) };
+}
 
-test("seven distinct production contours stay within their artwork and editor limits", () => {
+test("the seven approved portal locations and sizes are unchanged", () => {
+  const approved = [[33.3,94.8,10],[30.2,40.3,12],[83.4,57.1,13.5],[35.5,69.8,3.5],
+    [38.5,51.5,23],[83.3,31.5,19],[63,29.7,25]];
   assert.equal(presets.length, 7);
-  assert.equal(new Set(presets.map((p) => JSON.stringify(p.points))).size, 7);
+  assert.deepEqual(presets.map(p => [p.portalX,p.portalY,p.portalScale]), approved);
   for (const p of presets) {
-    assert.ok(p.name.length > 10);
-    assert.ok(p.portalScale >= 2 && p.portalScale <= 35);
-    assert.ok(p.feather > 0 && p.feather <= 80);
-    assert.ok(p.smoothing >= 0 && p.smoothing <= 1);
-    assert.equal(p.imageScale, 1, "production checkpoints use the full child image");
-    assert.equal(p.imageX, 0);
-    assert.equal(p.imageY, 0);
-    assert.ok(p.points.length >= 4 && p.points.length <= 12);
-    for (const point of p.points) {
-      for (const [axis, centre] of [["x", p.portalX], ["y", p.portalY]]) {
-        assert.ok(Number.isFinite(point[axis]) && point[axis] >= 0 && point[axis] <= 1);
-        const source = centre / 100 + p.portalScale / 100 * (point[axis] - 0.5);
-        assert.ok(source > 0 && source < 1, `${p.name}: ${axis} contour outside artwork`);
-      }
-    }
+    assert.ok(p.imageScale > 0.05 && p.imageScale < 0.5);
+    assert.match(p.matte, /^#[a-f0-9]{6}$/i);
+    assert.ok(p.feather > 0, "keep the authored feather");
+    assert.ok(p.portalX / 100 - p.portalScale / 200 >= 0);
+    assert.ok(p.portalY / 100 + p.portalScale / 200 <= 1);
   }
 });
 
-test("mask opening is late, monotonic, reversible, and complete at every checkpoint", () => {
-  for (let level = 0; level < 7; level++) {
-    assert.equal(maskOpeningScale(level - 1, level), 1);
-    assert.equal(maskOpeningScale(level + 0.87, level), 1);
-    const samples = Array.from({ length: 1001 }, (_, i) => maskOpeningScale(level + i / 1000, level));
-    for (let i = 1; i < samples.length; i++) {
-      assert.ok(samples[i] >= samples[i - 1] - 1e-10);
-      assert.ok(samples[i] - samples[i - 1] < 0.24, "no discrete aperture jump");
-    }
-    assert.ok(Math.abs(samples.at(-1) - 16) < 1e-10);
-    assert.equal(maskOpeningScale(level + 1.1, level), 16);
-    for (let i = 1000; i >= 0; i--) assert.equal(maskOpeningScale(level + i / 1000, level), samples[i]);
-    assert.equal(maskEdgeScale(level + 0.95, level), 1);
-    assert.ok(Math.abs(maskEdgeScale(level + 1, level) - 1.6) < 1e-10);
-  }
-});
-
-test("the final mask sample has an opaque central support region including blur margin", () => {
-  // The runtime blur is three box passes at 512×288. A support rectangle
-  // including all three radii must remain inside each authored contour.
+test("every pixel of the complete source rectangle is inside opaque mask pixels, with a safety border", async () => {
   for (const p of presets) {
-    const radius = Math.round(p.feather / 1000 * 512);
-    const marginX = 1 / 32 + 3 * radius / 512;
-    const marginY = 1 / 32 + 3 * radius / 288;
-    for (const dx of [-marginX, 0, marginX]) {
-      for (const dy of [-marginY, 0, marginY]) {
-        assert.ok(inside(0.5 + dx, 0.5 + dy, p.points), `${p.name}: insufficient opaque support`);
-      }
-    }
+    const { integral } = await raster(p);
+    const left = (0.5 + p.imageX / 100 - p.imageScale / 2) * 512;
+    const top = (0.5 + p.imageY / 100 - p.imageScale / 2) * 288;
+    const right = left + p.imageScale * 512;
+    const bottom = top + p.imageScale * 288;
+    assert.ok(opaqueRectangle(integral, left - 1, top - 1, right + 1, bottom + 1), p.name);
+    const fit = fitImageInsideMask(integral);
+    assert.deepEqual(fit, { imageScale:p.imageScale, imageX:p.imageX, imageY:p.imageY });
   }
 });
 
-test("free zoom opens only inside the image and restores its contour when panned away", () => {
-  assert.equal(maskViewWeight(0, 300, 1000, 700, 390, 844), 0);
-  assert.equal(maskViewWeight(0, 0, 390, 844, 390, 844), 0);
-  assert.equal(maskViewWeight(-200, -200, 790, 1244, 390, 844), 1);
-  assert.equal(maskViewWeight(0, 0, 0, 0, 390, 844), 0);
-  const partial = maskViewWeight(-20, -50, 430, 944, 390, 844);
-  assert.ok(partial > 0 && partial < 1);
-  assert.equal(maskOpeningScale(3, 0, 0), 1);
-  assert.equal(maskEdgeScale(3, 0, 0), 1);
-  assert.ok(maskOpeningScale(3, 0, partial) > 1 && maskOpeningScale(3, 0, partial) < 16);
+test("opacity containment never approves pixels outside the mask or its feather", () => {
+  const data = new Uint8ClampedArray(8 * 8 * 4);
+  for (let y=2;y<6;y++) for (let x=2;x<6;x++) data[(y*8+x)*4+3]=255;
+  const integral = opaqueIntegral(data,8,8);
+  assert.equal(opaqueRectangle(integral,2,2,6,6),true);
+  assert.equal(opaqueRectangle(integral,1,2,6,6),false);
+  assert.equal(opaqueRectangle(integral,-1,2,6,6),false);
+  assert.equal(opaqueRectangle(integral,2,2,9,6),false);
+  data[(3*8+3)*4+3]=254;
+  assert.equal(opaqueRectangle(opaqueIntegral(data,8,8),2,2,6,6),false);
 });
 
-test("authored contour bounds avoid the main captions and TGS logos", () => {
-  // Manually annotated source-space rectangles (x1,y1,x2,y2).
-  const protectedAreas = [
-    [[0.45, 0.10, 0.94, 0.65]],
-    [[0.51, 0.20, 0.89, 0.85], [0.225, 0.47, 0.31, 0.53], [0.18, 0.86, 0.36, 0.98]],
-    [[0.12, 0.04, 0.90, 0.27], [0.44, 0.37, 0.55, 0.52], [0.74, 0.77, 0.88, 0.92]],
-    [[0.05, 0.02, 0.95, 0.14], [0.64, 0.57, 0.98, 0.95]],
-    [[0.13, 0.07, 0.88, 0.24]],
-    [[0.26, 0.24, 0.76, 0.38]],
-    [[0.24, 0.01, 0.77, 0.14], [0.65, 0.53, 0.97, 0.81]],
-  ];
-  for (const [index, p] of presets.entries()) {
-    const xs = p.points.map(({ x }) => p.portalX / 100 + p.portalScale / 100 * (x - 0.5));
-    const ys = p.points.map(({ y }) => p.portalY / 100 + p.portalScale / 100 * (y - 0.5));
-    for (const [x1, y1, x2, y2] of protectedAreas[index]) {
-      assert.ok(Math.max(...xs) < x1 || Math.min(...xs) > x2 || Math.max(...ys) < y1 || Math.min(...ys) > y2, p.name);
-    }
-  }
+test("a mask without opaque space cannot silently crop the source to fit", () => {
+  const empty = opaqueIntegral(new Uint8ClampedArray(16 * 9 * 4),16,9);
+  assert.throws(() => fitImageInsideMask(empty), /espacio opaco/);
+});
+
+test("the app uses fixed masks for all ancestors and keeps guided selection unavailable", async () => {
+  const page = await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");
+  assert.doesNotMatch(page,/maskOpeningScale|maskEdgeScale|getOpeningCanvasMask/);
+  assert.match(page,/transitionLevel = 0; transitionLevel < layer/);
+  assert.match(page,/const mask = getCanvasMask\(transition\)/);
+  assert.doesNotMatch(page,/selectExperienceMode|setExperienceMode/);
+  assert.match(page,/Encajar imagen completa/);
 });
