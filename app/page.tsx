@@ -13,6 +13,8 @@ import {
   useRef,
   useState,
 } from "react";
+import productionTransitions from "./transition-presets.json";
+import { maskEdgeScale, maskOpeningScale, maskViewWeight } from "./mask-opening.mjs";
 
 export const dynamic = "force-static";
 
@@ -44,23 +46,35 @@ type TransitionSettings = {
   points: MaskPoint[];
 };
 
+type MaskStyle = Pick<TransitionSettings, "points" | "smoothing" | "feather">;
+const IMAGE_EDGE_MASK: MaskStyle = {
+  points: [{ x: 0.04, y: 0.04 }, { x: 0.96, y: 0.04 }, { x: 0.96, y: 0.96 }, { x: 0.04, y: 0.96 }],
+  smoothing: 0,
+  feather: 30,
+};
+const OPAQUE_MASK: MaskStyle = {
+  points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+  smoothing: 0,
+  feather: 0,
+};
+
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
 
 const SCENES = [
-  { src: publicAsset("/scenes/tgs-01-oficina.webp"), alt: "Reunión de oficina: nacimiento de Transportadora de Gas del Sur en 1992", focalX: 0.51, focalY: 0.88, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-02-operario-cartelera.webp"), alt: "Operario de TGS frente a la cartelera de inauguraciones de plantas", focalX: 0.29, focalY: 0.44, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-03-bolsa-ny.webp"), alt: "Inicio de la cotización de TGS en la Bolsa de Nueva York en 1994", focalX: 0.5, focalY: 0.85, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-04-gasoducto.webp"), alt: "Expansión de la red de gasoductos y construcción de plantas", focalX: 0.46, focalY: 0.66, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-05-planta-cerri.webp"), alt: "Inauguración del Tren C del Complejo Cerri en 1998", focalX: 0.53, focalY: 0.66, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-06-antena.webp"), alt: "Antena de comunicaciones y nacimiento de Telcosur en 2000", focalX: 0.825, focalY: 0.31, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-07-mas-plantas.webp"), alt: "Más plantas y desarrollo de TGS entre 2004 y 2009", focalX: 0.56, focalY: 0.3, portalStart: 10 },
-  { src: publicAsset("/scenes/tgs-08-gasoducto-submarino.webp"), alt: "Inauguración del gasoducto submarino Magallanes en 2010", focalX: 0.5, focalY: 0.5, portalStart: 10 },
+  { src: publicAsset("/scenes/tgs-01-oficina.webp"), alt: "Reunión de oficina: nacimiento de Transportadora de Gas del Sur en 1992" },
+  { src: publicAsset("/scenes/tgs-02-operario-cartelera.webp"), alt: "Operario de TGS frente a la cartelera de inauguraciones de plantas" },
+  { src: publicAsset("/scenes/tgs-03-bolsa-ny.webp"), alt: "Inicio de la cotización de TGS en la Bolsa de Nueva York en 1994" },
+  { src: publicAsset("/scenes/tgs-04-gasoducto.webp"), alt: "Expansión de la red de gasoductos y construcción de plantas" },
+  { src: publicAsset("/scenes/tgs-05-planta-cerri.webp"), alt: "Inauguración del Tren C del Complejo Cerri en 1998" },
+  { src: publicAsset("/scenes/tgs-06-antena.webp"), alt: "Antena de comunicaciones y nacimiento de Telcosur en 2000" },
+  { src: publicAsset("/scenes/tgs-07-mas-plantas.webp"), alt: "Más plantas y desarrollo de TGS entre 2004 y 2009" },
+  { src: publicAsset("/scenes/tgs-08-gasoducto-submarino.webp"), alt: "Inauguración del gasoducto submarino Magallanes en 2010" },
 ] as const;
 
 const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
-const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v1";
+const SETTINGS_KEY = "tgs-zoom-mask-settings-production-8-v2";
 const ARTWORK_ASPECT_RATIO = 16 / 9;
 const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
@@ -80,17 +94,6 @@ let decodesInFlight = 0;
 const CANVAS_MASK_CACHE = new Map<string, HTMLCanvasElement>();
 const CANVAS_REBASE_DELAY = 0.4;
 const CAMERA_TANGENT_STRENGTH = 0.18;
-
-const DEFAULT_MASK_POINTS: MaskPoint[] = [
-  { x: 0.5, y: 0.07 },
-  { x: 0.78, y: 0.14 },
-  { x: 0.93, y: 0.38 },
-  { x: 0.9, y: 0.68 },
-  { x: 0.68, y: 0.91 },
-  { x: 0.35, y: 0.92 },
-  { x: 0.1, y: 0.68 },
-  { x: 0.08, y: 0.34 },
-];
 
 const MASK_PRESETS = {
   circle: {
@@ -223,20 +226,17 @@ const releaseScenesOutside = (sources: Set<string>) => {
 const clonePoints = (points: MaskPoint[]) => points.map((point) => ({ ...point }));
 
 const createDefaultTransitions = (): TransitionSettings[] =>
-  ZOOM_SEQUENCE.slice(0, -1).map((_sceneIndex, level) => {
-    const scene = SCENES[ZOOM_SEQUENCE[level]];
-    return {
-      portalX: scene.focalX * 100,
-      portalY: scene.focalY * 100,
-      portalScale: scene.portalStart,
-      imageX: 0,
-      imageY: 0,
-      imageScale: 1,
-      smoothing: 0.72,
-      feather: 24,
-      points: clonePoints(DEFAULT_MASK_POINTS),
-    };
-  });
+  productionTransitions.map((preset) => ({
+    portalX: preset.portalX,
+    portalY: preset.portalY,
+    portalScale: preset.portalScale,
+    imageX: preset.imageX,
+    imageY: preset.imageY,
+    imageScale: preset.imageScale,
+    smoothing: preset.smoothing,
+    feather: preset.feather,
+    points: clonePoints(preset.points),
+  }));
 
 const distanceBetween = (positions: PointerPosition[]) =>
   Math.hypot(
@@ -298,7 +298,7 @@ const buildClosedPath = (points: MaskPoint[], smoothing: number, size = 1000) =>
   return `${commands.join(" ")} Z`;
 };
 
-const createMaskImage = (settings: TransitionSettings) => {
+const createMaskImage = (settings: MaskStyle) => {
   const cacheKey = JSON.stringify([
     settings.smoothing,
     settings.feather,
@@ -483,7 +483,7 @@ const blurMaskAlpha = (
   }
 };
 
-const getCanvasMask = (settings: TransitionSettings, featherOverride?: number) => {
+const getCanvasMask = (settings: MaskStyle, featherOverride?: number) => {
   const feather = featherOverride ?? settings.feather;
   const cacheKey = JSON.stringify([settings.smoothing, feather, settings.points]);
   const cachedMask = CANVAS_MASK_CACHE.get(cacheKey);
@@ -515,6 +515,45 @@ const getCanvasMask = (settings: TransitionSettings, featherOverride?: number) =
   }
   CANVAS_MASK_CACHE.set(cacheKey, canvas);
   return canvas;
+};
+
+let openingMaskCache: {
+  canvas: HTMLCanvasElement;
+  source: HTMLCanvasElement | null;
+  opening: number;
+  edgeScale: number;
+} | null = null;
+
+const getOpeningCanvasMask = (settings: TransitionSettings, depth: number, level: number, viewWeight = 1) => {
+  const opening = maskOpeningScale(depth, level, viewWeight);
+  if (opening >= 16) return getCanvasMask(OPAQUE_MASK);
+  const source = getCanvasMask(settings);
+  if (opening <= 1) return source;
+  const edgeScale = maskEdgeScale(depth, level, viewWeight);
+  if (!openingMaskCache) {
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+    openingMaskCache = { canvas, source: null, opening: 0, edgeScale: 0 };
+  }
+  const cache = openingMaskCache;
+  if (cache.source === source && cache.opening === opening && cache.edgeScale === edgeScale) return cache.canvas;
+  const context = cache.canvas.getContext("2d");
+  if (!context) return source;
+  const { width, height } = cache.canvas;
+  const sample = (mask: HTMLCanvasElement, scale: number) => context.drawImage(
+    mask, mask.width * (1 - 1 / scale) / 2, mask.height * (1 - 1 / scale) / 2,
+    mask.width / scale, mask.height / scale, 0, 0, width, height,
+  );
+  // Reuse one 512×288 surface; no per-frame blur or full-resolution buffer.
+  context.globalCompositeOperation = "copy";
+  sample(source, opening);
+  context.globalCompositeOperation = "destination-in";
+  sample(getCanvasMask(IMAGE_EDGE_MASK), edgeScale);
+  cache.source = source;
+  cache.opening = opening;
+  cache.edgeScale = edgeScale;
+  return cache.canvas;
 };
 
 function CanvasZoomRenderer({
@@ -710,7 +749,11 @@ function CanvasZoomRenderer({
               artworkHeight * camera.viewScale * parentPlacement.scale * portalScale * pixelRatio;
             const portalScreenX = toScreenX(portalCenterX);
             const portalScreenY = toScreenY(portalCenterY);
-            const mask = getCanvasMask(transition);
+            const viewWeight = cameraOverride ? maskViewWeight(
+              portalScreenX - portalWidth / 2, portalScreenY - portalHeight / 2,
+              portalWidth, portalHeight, renderWidth, renderHeight,
+            ) : 1;
+            const mask = getOpeningCanvasMask(transition, depth, transitionLevel, viewWeight);
 
             maskContext.globalCompositeOperation = maskDrawn ? "destination-in" : "source-over";
             maskContext.drawImage(
@@ -914,6 +957,7 @@ function ZoomLayer({
   maskIsDragging,
   onMaskDragChange,
   onMovePortal,
+  maskViewWeights,
 }: {
   level: number;
   transitions: TransitionSettings[];
@@ -926,6 +970,7 @@ function ZoomLayer({
   maskIsDragging: boolean;
   onMaskDragChange: (dragging: boolean) => void;
   onMovePortal: (deltaX: number, deltaY: number) => void;
+  maskViewWeights?: number[];
 }) {
   const scene = SCENES[ZOOM_SEQUENCE[level]];
   const hasNextLayer =
@@ -945,10 +990,20 @@ function ZoomLayer({
         transform: `translate3d(-50%, -50%, 0) scale(${transition.portalScale / 100})`,
       }
     : undefined;
-  const maskStyle: CSSProperties | undefined = transition
+  const opening = maskOpeningScale(depth, level, maskViewWeights?.[level] ?? 1);
+  const edgeOpening = maskEdgeScale(depth, level, maskViewWeights?.[level] ?? 1);
+  const edgeImage = createMaskImage(opening > 1 && opening < 16 ? IMAGE_EDGE_MASK : OPAQUE_MASK);
+  const maskStyle: CSSProperties | undefined = transition && (isLiveEditing || maskImage !== "none")
     ? isLiveEditing
       ? { clipPath: `polygon(${transition.points.map((point) => `${point.x * 100}% ${point.y * 100}%`).join(", ")})` }
-      : { WebkitMaskImage: maskImage, maskImage }
+      : {
+          WebkitMaskImage: `${maskImage}, ${edgeImage}`,
+          maskImage: `${maskImage}, ${edgeImage}`,
+          WebkitMaskSize: `${opening * 100}% ${opening * 100}%, ${edgeOpening * 100}% ${edgeOpening * 100}%`,
+          maskSize: `${opening * 100}% ${opening * 100}%, ${edgeOpening * 100}% ${edgeOpening * 100}%`,
+          WebkitMaskPosition: "center", maskPosition: "center",
+          WebkitMaskComposite: "source-in", maskComposite: "intersect",
+        }
     : undefined;
   const contentStyle: CSSProperties | undefined = transition
     ? {
@@ -981,6 +1036,7 @@ function ZoomLayer({
                 maskIsDragging={maskIsDragging}
                 onMaskDragChange={onMaskDragChange}
                 onMovePortal={onMovePortal}
+                maskViewWeights={maskViewWeights}
               />
             </div>
           </div>
@@ -1556,6 +1612,22 @@ export default function Home() {
   const editorOffsetX = developerMode && workspaceShifted && viewport.width >= 680
     ? -(panelWidth / 2 + 12)
     : 0;
+  const editorMaskViewWeights = developerMode && experienceMode === "manual"
+    ? transitions.map((transition, index) => {
+        const placement = activeCamera.placements[index];
+        if (!placement) return 0;
+        const scale = transition.portalScale / 100;
+        const width = canvasWidth * viewScale * placement.scale * scale;
+        const height = canvasHeight * viewScale * placement.scale * scale;
+        const x = placement.centerX + placement.scale * (transition.portalX / 100 - 0.5);
+        const y = placement.centerY + placement.scale * (transition.portalY / 100 - 0.5);
+        return maskViewWeight(
+          viewport.width / 2 + (x - displayCameraX) * canvasWidth * viewScale + editorOffsetX - width / 2,
+          viewport.height / 2 + (y - displayCameraY) * canvasHeight * viewScale - height / 2,
+          width, height, viewport.width, viewport.height,
+        );
+      })
+    : undefined;
   const canvasStyle: CSSProperties = { width: canvasWidth, height: canvasHeight };
   const activeTransition = transitions[editingTransition];
   const editingPlacement =
@@ -1696,7 +1768,7 @@ export default function Home() {
                   onMovePoint={moveMaskPoint} editorHandleScale={editorHandleScale}
                   depth={depth} maskIsDragging={isActiveBuffer && maskIsDragging}
                   onMaskDragChange={handleMaskDragChange}
-                  onMovePortal={movePortalByPixels} />
+                  onMovePortal={movePortalByPixels} maskViewWeights={editorMaskViewWeights} />
               </div>
             </div>
           );
@@ -1742,6 +1814,7 @@ export default function Home() {
             </label>
 
             <section className="editor-section">
+              <p>Entrada propuesta: {productionTransitions[editingTransition].name}.</p>
               <div className="editor-section__title"><h3>Forma de la máscara</h3><span>{activeTransition.points.length} puntos</span></div>
               <p>Arrastrá los puntos para dibujar el contorno. El control central mueve la máscara completa y define hacia dónde apunta el zoom.</p>
               <div className="mask-presets" aria-label="Formas iniciales">
@@ -1798,9 +1871,9 @@ export default function Home() {
             <details className="editor-advanced">
               <summary>Posición de la entrada</summary>
               <EditorRange label="Entrada horizontal" value={activeTransition.portalX}
-                min={10} max={90} step={0.5} suffix="%" onChange={(portalX) => updateTransition({ portalX })} />
+                min={1} max={99} step={0.5} suffix="%" onChange={(portalX) => updateTransition({ portalX })} />
               <EditorRange label="Entrada vertical" value={activeTransition.portalY}
-                min={10} max={90} step={0.5} suffix="%" onChange={(portalY) => updateTransition({ portalY })} />
+                min={1} max={99} step={0.5} suffix="%" onChange={(portalY) => updateTransition({ portalY })} />
               <EditorRange label="Tamaño inicial" value={activeTransition.portalScale}
                 min={2} max={35} step={0.5} suffix="%" onChange={(portalScale) => updateTransition({ portalScale })} />
             </details>
