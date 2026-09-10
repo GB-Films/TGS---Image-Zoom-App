@@ -64,4 +64,5 @@ test("the app uses fixed masks for all ancestors and keeps guided selection unav
   assert.doesNotMatch(page,/selectExperienceMode|setExperienceMode/);
   assert.match(page,/Encajar imagen completa/);
   assert.match(page,/const anchorLevel = developerMode \? editingTransition/);
+  assert.match(page,/const rebaseBlend = developerMode \|\| experienceMode === "guided"/);
 });

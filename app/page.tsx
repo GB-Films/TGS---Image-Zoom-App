@@ -1402,7 +1402,7 @@ export default function Home() {
       ? anchorLevel + 1
       : null;
   const rebaseBlendStart = anchorLevel + 1 + REBASE_DELAY;
-  const rebaseBlend = experienceMode === "guided" || anchorLevel === 0
+  const rebaseBlend = developerMode || experienceMode === "guided" || anchorLevel === 0
     ? 1
     : clamp((depth - rebaseBlendStart) / REBASE_BLEND_DEPTH, 0, 1);
   const previousAnchorLevel = anchorLevel > 0 && rebaseBlend < 1
