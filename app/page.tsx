@@ -18,6 +18,7 @@ import MaskEditorAccess from "./mask-editor-access";
 import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
+import { interpolateSpline, createZoomScaleMapping, cameraForPinch } from "./zoom-gesture.mjs";
 
 export const dynamic = "force-static";
 
@@ -25,7 +26,6 @@ type MotionOrigin = { beta: number; gamma: number };
 type PointerPosition = { x: number; y: number };
 type GestureOrigin = {
   distance: number;
-  depth: number;
   cameraX: number;
   cameraY: number;
   viewScale: number;
@@ -75,7 +75,6 @@ let decodesInFlight = 0;
 const CANVAS_MASK_CACHE = new Map<string, HTMLCanvasElement>();
 const MASK_OPAQUE_CACHE = new WeakMap<HTMLCanvasElement, ReturnType<typeof opaqueIntegral>>();
 const CANVAS_REBASE_DELAY = 0.4;
-const CAMERA_TANGENT_STRENGTH = 0.18;
 
 const MASK_PRESETS = {
   circle: {
@@ -226,25 +225,6 @@ const distanceBetween = (positions: PointerPosition[]) =>
     positions[0].x - positions[1].x,
     positions[0].y - positions[1].y,
   );
-
-const interpolateSpline = (
-  previous: number,
-  start: number,
-  end: number,
-  following: number,
-  progress: number,
-) => {
-  const progressSquared = progress * progress;
-  const progressCubed = progressSquared * progress;
-  const startTangent = (end - previous) * CAMERA_TANGENT_STRENGTH;
-  const endTangent = (following - start) * CAMERA_TANGENT_STRENGTH;
-  return (
-    (2 * progressCubed - 3 * progressSquared + 1) * start +
-    (progressCubed - 2 * progressSquared + progress) * startTangent +
-    (-2 * progressCubed + 3 * progressSquared) * end +
-    (progressCubed - progressSquared) * endTangent
-  );
-};
 
 const createMaskImage = (settings: MaskStyle) => {
   const cacheKey = JSON.stringify([
@@ -982,6 +962,9 @@ export default function Home() {
   const preloadLevel = Math.floor(depth);
   const canvasWidth = Math.max(viewport.width, viewport.height * ARTWORK_ASPECT_RATIO);
   const canvasHeight = canvasWidth / ARTWORK_ASPECT_RATIO;
+  const zoomScaleMapping = useMemo(() => createZoomScaleMapping(
+    calculateLayerPlacements(transitions, 0).map((placement) => 1 / placement!.scale),
+  ), [transitions]);
   const manualBaseViewScale = calculateCanonicalCameraAtDepth(transitions, depth).viewScale;
 
   const setWelcomeParallax = useCallback((x: number, y: number) => {
@@ -1278,10 +1261,9 @@ export default function Home() {
       };
       gestureOriginRef.current = {
         distance: Math.max(distanceBetween(positions), 1),
-        depth: depthRef.current,
         cameraX: manualCameraRef.current.x,
         cameraY: manualCameraRef.current.y,
-        viewScale: manualBaseViewScale,
+        viewScale: zoomScaleMapping.scaleAtDepth(depthRef.current),
         focusX: focus.x,
         focusY: focus.y,
       };
@@ -1296,7 +1278,7 @@ export default function Home() {
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointersRef.current.size < 2) {
       if (experienceMode !== "manual" || !panOriginRef.current) return;
-      const parentScreenScale = Math.max(manualBaseViewScale, 0.001);
+      const parentScreenScale = Math.max(zoomScaleMapping.scaleAtDepth(depthRef.current), 0.001);
       setManualCameraPosition(
         panOriginRef.current.cameraX - (event.clientX - panOriginRef.current.x) / (canvasWidth * parentScreenScale),
         panOriginRef.current.cameraY - (event.clientY - panOriginRef.current.y) / (canvasHeight * parentScreenScale),
@@ -1307,31 +1289,30 @@ export default function Home() {
     if (!gestureOriginRef.current) return;
     const positions = Array.from(pointersRef.current.values()).slice(0, 2);
     const distance = Math.max(distanceBetween(positions), 1);
-    const scaleDelta = Math.log2(distance / gestureOriginRef.current.distance);
-    const nextDepth = clamp(gestureOriginRef.current.depth + scaleDelta * 0.9, 0, MAX_DEPTH);
+    const requestedScale = gestureOriginRef.current.viewScale
+      * distance / gestureOriginRef.current.distance;
+    const nextDepth = zoomScaleMapping.depthAtScale(requestedScale);
     if (experienceMode === "manual") {
       const focus = {
         x: (positions[0].x + positions[1].x) / 2,
         y: (positions[0].y + positions[1].y) / 2,
       };
-      const nextViewScale = calculateCanonicalCameraAtDepth(transitions, nextDepth).viewScale;
-      const focusX = (gestureOriginRef.current.focusX - viewport.width / 2) / canvasWidth;
-      const focusY = (gestureOriginRef.current.focusY - viewport.height / 2) / canvasHeight;
-      const nextFocusX = (focus.x - viewport.width / 2) / canvasWidth;
-      const nextFocusY = (focus.y - viewport.height / 2) / canvasHeight;
-      setManualCameraPosition(
-        gestureOriginRef.current.cameraX + focusX / gestureOriginRef.current.viewScale - nextFocusX / nextViewScale,
-        gestureOriginRef.current.cameraY + focusY / gestureOriginRef.current.viewScale - nextFocusY / nextViewScale,
-        nextViewScale,
-      );
+      const nextViewScale = zoomScaleMapping.scaleAtDepth(nextDepth);
+      const camera = cameraForPinch(gestureOriginRef.current, focus, nextViewScale,
+        viewport, { width: canvasWidth, height: canvasHeight });
+      setManualCameraPosition(camera.x, camera.y, nextViewScale);
     }
     commitDepth(nextDepth);
   };
 
   const handleZoomPointerEnd = (event: PointerEvent<HTMLElement>) => {
+    if (!pointersRef.current.has(event.pointerId)) return;
     pointersRef.current.delete(event.pointerId);
     gestureOriginRef.current = null;
-    if (pointersRef.current.size === 0) panOriginRef.current = null;
+    const remainingPointer = pointersRef.current.values().next().value;
+    panOriginRef.current = remainingPointer && experienceMode === "manual"
+      ? { ...remainingPointer, cameraX: manualCameraRef.current.x, cameraY: manualCameraRef.current.y }
+      : null;
   };
 
   const handleWheel = (event: WheelEvent<HTMLElement>) => {

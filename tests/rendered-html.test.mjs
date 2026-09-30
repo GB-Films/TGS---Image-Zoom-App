@@ -111,7 +111,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /RENDER_AHEAD_LEVELS = 3/);
   assert.match(page, /fetchPriority=/);
   assert.match(page, /interpolateSpline/);
-  assert.match(page, /CAMERA_TANGENT_STRENGTH = 0\.18/);
+  const gesture = await readFile(new URL("../app/zoom-gesture.mjs", import.meta.url), "utf8");
+  assert.match(gesture, /CAMERA_TANGENT_STRENGTH = 0\.18/);
   const geometry = await readFile(new URL("../app/mask-geometry.mjs", import.meta.url), "utf8");
   assert.match(geometry, /const strength = smoothing \/ 6/);
   assert.match(page, /logViewScale/);
