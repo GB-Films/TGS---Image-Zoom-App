@@ -24,4 +24,8 @@ Las publicaciones requieren la contraseña del proyecto, mantienen control de ve
 
 ## Revisión
 
+La revisión de contenido del 1 de octubre detectó que preparar el estilo y el alpha no había aplicado todas las notas del PowerPoint. Las escenas 2 y 5 se regeneraron con sus datos corregidos y la marca histórica de la 5, conservando dimensiones, transiciones y transparencia. Usan nombres de archivo nuevos para evitar imágenes viejas en caché. Los recursos sustituidos tienen respaldo local en `work/audit-ppt-2026-10-01/Version anterior app`.
+
+Quedan correcciones claras en las escenas 3, 4, 8, 9, 11, 12, 13, 14, 15, 17 y 19, y revisión visual/editorial en 10, 16 y 21. No declarar todas las notas del PowerPoint incorporadas. La revisión completa de las 26 diapositivas y seis notas, con las decisiones abiertas de los cierres, se conserva en la documentación local de producción.
+
 `node scripts/fit-masks.mjs` recalcula encajes sin modificar contornos. `node scripts/preview-masks.mjs` produce detalles de las 25 uniones en `outputs/masks`, fuera de Git. Las pruebas cubren orden, alpha, resolución, proporciones, encajes opacos, zona central, rellenos, aislamiento del historial y pellizco hasta la última unión. La lámina no sustituye la revisión de movimiento en navegador ni en un dispositivo real.
