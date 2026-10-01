@@ -36,6 +36,9 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Verify scene assets and masks
+        run: node --test tests/*.test.mjs
+
       - name: Flatten project-site assets
         run: |
           cp -R dist/client/TGS---Image-Zoom-App/_next dist/client/_next
