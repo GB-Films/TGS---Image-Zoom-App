@@ -12,6 +12,14 @@ export const maskSessions = sqliteTable("mask_sessions", {
   expiresAt: integer("expires_at").notNull(),
 });
 
+export const maskCollectionVersions = sqliteTable("mask_collection_versions", {
+  version: integer("version").primaryKey({ autoIncrement: true }),
+  collection: text("collection").notNull(),
+  requestId: text("request_id").notNull().unique(),
+  payload: text("payload").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const maskLoginLimits = sqliteTable("mask_login_limits", {
   key: text("key").primaryKey(),
   attempts: integer("attempts").notNull(),

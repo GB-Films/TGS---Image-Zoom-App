@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "app/**/*.tsx", "app/**/*.mjs", "shared/**/*.mjs", "db/schema.ts"],
+  "exclude": ["node_modules", "work", "outputs", "dist"],
+  "compilerOptions": { "incremental": false }
+}

@@ -12,14 +12,13 @@ async function raster(p) {
   return { data, integral: opaqueIntegral(data, 512, 288) };
 }
 
-test("the seven approved portal locations and sizes are unchanged", () => {
-  const approved = [[33.3,94.8,10],[30.2,40.3,12],[83.4,57.1,13.5],[35.5,69.8,3.5],
-    [38.5,51.5,23],[83.3,31.5,19],[63,29.7,25]];
-  assert.equal(presets.length, 7);
-  assert.deepEqual(presets.map(p => [p.portalX,p.portalY,p.portalScale]), approved);
+test("25 authored portals stay in the central zone, with feather and no implicit fill", () => {
+  assert.equal(presets.length, 25);
   for (const p of presets) {
-    assert.ok(p.imageScale > 0.05 && p.imageScale < 0.5);
-    assert.match(p.matte, /^#[a-f0-9]{6}$/i);
+    assert.ok(p.imageScale > 0.05 && p.imageScale <= 1);
+    assert.equal(p.matte,null);
+    assert.ok(p.portalX>=100/6 && p.portalX<=500/6);
+    assert.ok(p.portalY>=100/6 && p.portalY<=500/6);
     assert.ok(p.feather > 0, "keep the authored feather");
     assert.ok(p.portalX / 100 - p.portalScale / 200 >= 0);
     assert.ok(p.portalY / 100 + p.portalScale / 200 <= 1);

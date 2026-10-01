@@ -1,5 +1,6 @@
 import presets from "../app/transition-presets.json" with { type: "json" };
-import { validateMasks } from "../shared/mask-settings.mjs";
+import legacyPresets from "./legacy-transition-presets.json" with { type: "json" };
+import { SCENE_COLLECTION, validateMasks } from "../shared/mask-settings.mjs";
 
 const defaults = validateMasks(presets);
 const encoder = new TextEncoder();
@@ -38,9 +39,9 @@ async function body(request) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-function snapshot(row) {
-  return row ? {version:row.version, updatedAt:row.updated_at, transitions:validateMasks(JSON.parse(row.payload))}
-    : {version:0,updatedAt:null,transitions:defaults};
+function snapshot(row, current) {
+  return row ? {version:row.version, updatedAt:row.updated_at, transitions:validateMasks(JSON.parse(row.payload),current ? 25 : 7)}
+    : {version:0,updatedAt:null,transitions:current ? defaults : validateMasks(legacyPresets,7)};
 }
 
 export default {
@@ -56,14 +57,22 @@ export default {
     const json = (data,status=200) => new Response(JSON.stringify(data),{status,headers});
     if (origin && !allowed.includes(origin)) return json({error:"Origen no permitido."},403);
     if (request.method === "OPTIONS") return new Response(null,{status:204,headers});
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const collection = url.searchParams.get("collection");
+    if (collection !== null && collection !== SCENE_COLLECTION) return json({error:"Colección desconocida."},400);
+    const current = collection === SCENE_COLLECTION;
+    const table = current ? "mask_collection_versions" : "mask_versions";
+    // Fixed server-owned identifier; never interpolate untrusted request text.
+    const scope = current ? `WHERE collection = '${SCENE_COLLECTION}'` : "";
+    const scopeAnd = current ? `AND collection = '${SCENE_COLLECTION}'` : "";
     if (path === "/") return json({service:"TGS · Máscaras compartidas"});
     if (!env.DB || !env.MASK_EDITOR_PASSWORD) return json({error:"El servicio todavía no está configurado."},503);
     const db = env.DB;
     const now = Date.now();
     try {
       if (path === "/masks" && request.method === "GET") {
-        return json(snapshot(await db.prepare("SELECT version, payload, updated_at FROM mask_versions ORDER BY version DESC LIMIT 1").first()));
+        return json(snapshot(await db.prepare(`SELECT version, payload, updated_at FROM ${table} ${scope} ORDER BY version DESC LIMIT 1`).first(),current));
       }
       if (path === "/session" && request.method === "POST") {
         // Atomic, durable throttling, including concurrent attempts. No raw IPs or passwords are stored.
@@ -101,20 +110,20 @@ export default {
         let input, transitions;
         try {
           input = await body(request);
-          transitions = validateMasks(input.transitions);
+          transitions = validateMasks(input.transitions,current ? 25 : 7);
           if (!Number.isSafeInteger(input.baseVersion) || input.baseVersion < 0 || typeof input.requestId !== "string" || !/^[a-f0-9-]{36}$/.test(input.requestId)) throw new Error("Publicación inválida.");
         } catch (error) { return json({error:error.message || "Máscaras inválidas."},400); }
         // A retry after a lost response cannot publish twice. Conflicting editors cannot overwrite each other.
         const payload = JSON.stringify(transitions);
-        const previous = await db.prepare("SELECT version,payload,updated_at FROM mask_versions WHERE request_id = ?").bind(input.requestId).first();
-        if (previous) return previous.payload === payload ? json(snapshot(previous)) : json({error:"Identificador de publicación reutilizado."},409);
-        const row = await db.prepare(`INSERT INTO mask_versions (request_id,payload,updated_at)
-          SELECT ?,?,? WHERE COALESCE((SELECT MAX(version) FROM mask_versions),0) = ?
+        const previous = await db.prepare(`SELECT version,payload,updated_at FROM ${table} WHERE request_id = ? ${scopeAnd}`).bind(input.requestId).first();
+        if (previous) return previous.payload === payload ? json(snapshot(previous,current)) : json({error:"Identificador de publicación reutilizado."},409);
+        const row = await db.prepare(`INSERT INTO ${table} (request_id,payload,updated_at${current ? ",collection" : ""})
+          SELECT ?,?,?${current ? `,'${SCENE_COLLECTION}'` : ""} WHERE COALESCE((SELECT MAX(version) FROM ${table} ${scope}),0) = ?
           ON CONFLICT(request_id) DO NOTHING RETURNING version,payload,updated_at`)
           .bind(input.requestId,payload,new Date(now).toISOString(),input.baseVersion).first();
-        if (row) return json(snapshot(row));
-        const retry = await db.prepare("SELECT version,payload,updated_at FROM mask_versions WHERE request_id = ?").bind(input.requestId).first();
-        if (retry?.payload === payload) return json(snapshot(retry));
+        if (row) return json(snapshot(row,current));
+        const retry = await db.prepare(`SELECT version,payload,updated_at FROM ${table} WHERE request_id = ? ${scopeAnd}`).bind(input.requestId).first();
+        if (retry?.payload === payload) return json(snapshot(retry,current));
         return json({error:"Hay una versión publicada más reciente. Cargala antes de volver a publicar; tu borrador se conserva."},409);
       }
       return json({error:"Ruta no disponible."},404);

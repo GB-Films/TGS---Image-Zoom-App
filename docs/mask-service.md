@@ -11,10 +11,12 @@
 
 ## Contrato
 
-- `GET /masks`: versión, fecha y las siete máscaras publicadas. Si no hay publicaciones, devuelve las máscaras aprobadas con versión cero.
+- `GET /masks?collection=tgs-2026-10-01`: versión, fecha y las 25 máscaras de la nueva colección. Usa `mask_collection_versions`, separado de `mask_versions`; devuelve las entradas aprobadas con versión cero si todavía no se publicaron ajustes. `GET /masks` mantiene las siete máscaras antiguas para clientes anteriores. No se borra ni migra destructivamente ese historial.
 - `POST /session`: recibe la contraseña por HTTPS; devuelve una sesión aleatoria de ocho horas. Diez intentos por dirección en diez minutos. Se persiste únicamente un hash de la dirección y de cada token, nunca la contraseña recibida.
 - `PUT /masks`: requiere `Authorization: Bearer …`, máscaras válidas, `baseVersion` y un `requestId` UUID. Una operación SQL condicional evita sobrescribir una publicación más reciente; el identificador permite reintentos seguros.
 - `DELETE /session`: revoca la sesión. Todas las respuestas llevan `Cache-Control: no-store`. CORS permite los orígenes configurados; no es el mecanismo de autenticación.
+
+Cada máscara guarda `matte`: `null` significa sin relleno y `"#ffffff"` activa el fondo blanco. Un campo ausente también significa sin relleno; no se agrega blanco automáticamente. Se conservan los colores explícitos de configuraciones anteriores. El selector **Fondo de la máscara**, dentro de **Imagen insertada**, afecta tanto al editor como al visor; los borradores y la publicación compartida conservan esta elección. No elimina fondos blancos que ya estén dibujados dentro del archivo de imagen.
 
 El editor tiene una contraseña compartida, no cuentas personales. No identifica autores. Es suficiente para el alcance interno solicitado; no usar esta clave sencilla para datos sensibles ni otros servicios.
 

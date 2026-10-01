@@ -1,8 +1,10 @@
-/** @typedef {{portalX:number,portalY:number,portalScale:number,imageX:number,imageY:number,imageScale:number,matte:string,smoothing:number,feather:number,points:{x:number,y:number}[]}} MaskSettings */
+/** @typedef {{portalX:number,portalY:number,portalScale:number,imageX:number,imageY:number,imageScale:number,matte:string|null,smoothing:number,feather:number,points:{x:number,y:number}[]}} MaskSettings */
 
 /** Validate untrusted saved data and copy only renderable fields. @returns {MaskSettings[]} */
-export function validateMasks(value) {
-  if (!Array.isArray(value) || value.length !== 7) throw new Error("Se necesitan las siete máscaras.");
+export const SCENE_COLLECTION = "tgs-2026-10-01";
+export const TRANSITION_COUNT = 25;
+export function validateMasks(value, count = TRANSITION_COUNT) {
+  if (!Array.isArray(value) || value.length !== count) throw new Error(`Se necesitan ${count} máscaras.`);
   const limits = { portalX:[1,99], portalY:[1,99], portalScale:[2,35], imageX:[-50,50],
     imageY:[-50,50], imageScale:[0.05,2], smoothing:[0,1], feather:[0,80] };
   return value.map((item) => {
@@ -14,8 +16,10 @@ export function validateMasks(value) {
       }
       result[field] = item[field];
     }
-    const matte = item.matte ?? "#ffffff";
-    if (typeof matte !== "string" || !/^#[a-f0-9]{6}$/i.test(matte)) throw new Error("Color de reborde inválido.");
+    // No implicit fill: null survives drafts, publication and subsequent reads.
+    // Explicit colors in previously published masks retain their appearance.
+    const matte = item.matte ?? null;
+    if (matte !== null && (typeof matte !== "string" || !/^#[a-f0-9]{6}$/i.test(matte))) throw new Error("Color de reborde inválido.");
     if (!Array.isArray(item.points) || item.points.length < 3 || item.points.length > 64) throw new Error("Usá entre 3 y 64 puntos por máscara.");
     const points = item.points.map(p => {
       if (!p || typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) throw new Error("Punto fuera de la máscara.");
@@ -26,8 +30,8 @@ export function validateMasks(value) {
 }
 
 /** @returns {{version:number, updatedAt:string|null, transitions:MaskSettings[]}} */
-export function validateSnapshot(value) {
+export function validateSnapshot(value, count = TRANSITION_COUNT) {
   if (!value || !Number.isSafeInteger(value.version) || value.version < 0 ||
     !(value.updatedAt === null || typeof value.updatedAt === "string")) throw new Error("Versión de máscaras inválida.");
-  return {version:value.version, updatedAt:value.updatedAt, transitions:validateMasks(value.transitions)};
+  return {version:value.version, updatedAt:value.updatedAt, transitions:validateMasks(value.transitions,count)};
 }

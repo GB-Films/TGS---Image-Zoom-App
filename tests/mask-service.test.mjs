@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import service from "../service/masks.mjs";
 import presets from "../app/transition-presets.json" with { type: "json" };
+import legacy from "../service/legacy-transition-presets.json" with {type:"json"};
 
-const sql = await readFile(new URL("../drizzle/0000_first_obadiah_stane.sql",import.meta.url),"utf8");
+const sql = (await Promise.all((await readdir(new URL("../drizzle/",import.meta.url)))
+  .filter(f => f.endsWith(".sql")).sort().map(f => readFile(new URL(`../drizzle/${f}`,import.meta.url),"utf8")))).join("\n");
 function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(sql);
@@ -21,7 +23,7 @@ function fixture(t) {
   }};
   const password = crypto.randomUUID();
   const env = {DB:db,MASK_EDITOR_PASSWORD:password,MASK_ALLOWED_ORIGINS:"https://gb-films.github.io"};
-  const call = (path,method="GET",data,token,origin="https://gb-films.github.io") => service.fetch(new Request(`https://service.test${path}`,{
+  const call = (path,method="GET",data,token,origin="https://gb-films.github.io") => service.fetch(new Request(`https://service.test${path === "/masks" ? "/masks?collection=tgs-2026-10-01" : path}`,{
     method,headers:{Origin:origin,"Content-Type":"application/json",...(token ? {Authorization:`Bearer ${token}`} : {})},
     ...(data === undefined ? {} : {body:JSON.stringify(data)}),
   }),env);
@@ -37,7 +39,7 @@ test("anonymous readers get the published defaults, no credentials and explicit 
   assert.equal(response.headers.get("cache-control"),"no-store");
   const data = await response.json();
   assert.equal(data.version,0);
-  assert.equal(data.transitions.length,7);
+  assert.equal(data.transitions.length,25);
   assert.equal(data.token,undefined);
   assert.equal((await call("/masks","PUT",{})).status,401);
   assert.equal((await call("/masks","GET",undefined,undefined,"https://other.test")).status,403);
@@ -67,11 +69,11 @@ test("publication persists for every reader, preserves history, and refuses stal
   assert.equal((await first.json()).version,1);
   assert.equal((await (await call("/masks")).json()).transitions[0].portalX,34);
   assert.equal((await call("/masks","PUT",request,token)).status,200,"retry is idempotent");
-  assert.equal(sqlite.prepare("SELECT count(*) AS count FROM mask_versions").get().count,1);
+  assert.equal(sqlite.prepare("SELECT count(*) AS count FROM mask_collection_versions").get().count,1);
   assert.equal((await call("/masks","PUT",{...request,requestId:crypto.randomUUID()},token)).status,409);
   const second = await call("/masks","PUT",{...request,baseVersion:1,requestId:crypto.randomUUID()},token);
   assert.equal((await second.json()).version,2);
-  assert.equal(sqlite.prepare("SELECT count(*) AS count FROM mask_versions").get().count,2);
+  assert.equal(sqlite.prepare("SELECT count(*) AS count FROM mask_collection_versions").get().count,2);
 });
 
 test("invalid geometry and oversized requests cannot change published masks",async t=>{
@@ -90,6 +92,29 @@ test("repeated password attempts are throttled persistently",async t=>{
   assert.equal((await call("/session","POST",{password:"wrong-test-value"})).status,429);
 });
 
+test("white and transparent backgrounds persist for anonymous readers and can be switched back",async t=>{
+  const {call,login,sqlite} = fixture(t);
+  const token = await login();
+  const transitions = structuredClone(presets);
+  transitions[0].matte = null;
+  transitions[1].matte = "#ffffff";
+  let response = await call("/masks","PUT",{baseVersion:0,requestId:crypto.randomUUID(),transitions},token);
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).transitions[0].matte,null);
+  let published = await (await call("/masks")).json();
+  assert.equal(published.transitions[0].matte,null);
+  assert.equal(published.transitions[1].matte,"#ffffff");
+  assert.equal(JSON.parse(sqlite.prepare("SELECT payload FROM mask_collection_versions WHERE version=1").get().payload)[0].matte,null);
+  transitions[0].matte = "#ffffff";
+  transitions[1].matte = null;
+  response = await call("/masks","PUT",{baseVersion:1,requestId:crypto.randomUUID(),transitions},token);
+  assert.equal(response.status,200);
+  published = await (await call("/masks")).json();
+  assert.equal(published.transitions[0].matte,"#ffffff");
+  assert.equal(published.transitions[1].matte,null);
+  assert.equal(published.version,2);
+});
+
 test("missing configuration or a database failure fails closed",async t=>{
   const {env} = fixture(t);
   const request = new Request("https://service.test/masks");
@@ -99,4 +124,19 @@ test("missing configuration or a database failure fails closed",async t=>{
   try {
     assert.equal((await service.fetch(request,{...env,DB:{prepare(){throw new Error("offline");}}})).status,503);
   } finally { console.error = original; }
+});
+
+test("old published masks remain intact and cannot replace the new collection",async t=>{
+  const {call,login,sqlite}=fixture(t);
+  sqlite.prepare("INSERT INTO mask_versions (request_id,payload,updated_at) VALUES (?,?,?)")
+    .run(crypto.randomUUID(),JSON.stringify(legacy),'2026-09-30');
+  const old=await (await call('/masks?legacy=1')).json();
+  assert.equal(old.version,1);assert.equal(old.transitions.length,7);
+  const current=await (await call('/masks')).json();
+  assert.equal(current.version,0);assert.equal(current.transitions.length,25);
+  const token=await login();
+  assert.equal((await call('/masks','PUT',{baseVersion:0,requestId:crypto.randomUUID(),transitions:legacy},token)).status,400);
+  assert.equal((await call('/masks?collection=unknown')).status,400);
+  assert.equal((await call('/masks','PUT',{baseVersion:0,requestId:crypto.randomUUID(),transitions:presets},token)).status,200);
+  assert.equal((await (await call('/masks?legacy=1')).json()).version,1);
 });

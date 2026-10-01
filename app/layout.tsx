@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import scenes from "./scenes.json";
 
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
@@ -40,8 +41,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        <link rel="preload" as="image" href={publicAsset("/scenes/tgs-01-oficina.webp")} type="image/webp" />
-        <link rel="preload" as="image" href={publicAsset("/scenes/tgs-02-operario-cartelera.webp")} type="image/webp" />
+        {scenes.slice(0, 4).map(scene => <link key={scene.id} rel="preload" as="image" href={publicAsset(scene.src)} type="image/webp" />)}
       </head>
       <body>{children}</body>
     </html>

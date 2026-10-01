@@ -14,6 +14,8 @@ import {
   useState,
 } from "react";
 import productionTransitions from "./transition-presets.json";
+import productionScenes from "./scenes.json";
+import { ARTWORK_ASPECT_RATIO, containedArtwork, rebaseCamera } from "./scene-geometry.mjs";
 import MaskEditorAccess from "./mask-editor-access";
 import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
@@ -43,21 +45,9 @@ type MaskStyle = Pick<TransitionSettings, "points" | "smoothing" | "feather">;
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
 
-const SCENES = [
-  { src: publicAsset("/scenes/tgs-01-oficina.webp"), alt: "Reunión de oficina: nacimiento de Transportadora de Gas del Sur en 1992" },
-  { src: publicAsset("/scenes/tgs-02-operario-cartelera.webp"), alt: "Operario de TGS frente a la cartelera de inauguraciones de plantas" },
-  { src: publicAsset("/scenes/tgs-03-bolsa-ny.webp"), alt: "Inicio de la cotización de TGS en la Bolsa de Nueva York en 1994" },
-  { src: publicAsset("/scenes/tgs-04-gasoducto.webp"), alt: "Expansión de la red de gasoductos y construcción de plantas" },
-  { src: publicAsset("/scenes/tgs-05-planta-cerri.webp"), alt: "Inauguración del Tren C del Complejo Cerri en 1998" },
-  { src: publicAsset("/scenes/tgs-06-antena.webp"), alt: "Antena de comunicaciones y nacimiento de Telcosur en 2000" },
-  { src: publicAsset("/scenes/tgs-07-mas-plantas.webp"), alt: "Más plantas y desarrollo de TGS entre 2004 y 2009" },
-  { src: publicAsset("/scenes/tgs-08-gasoducto-submarino.webp"), alt: "Inauguración del gasoducto submarino Magallanes en 2010" },
-] as const;
-
-const ZOOM_SEQUENCE = [0, 1, 2, 3, 4, 5, 6, 7] as const;
+const SCENES = productionScenes.map(scene => ({ ...scene, src: publicAsset(scene.src) }));
+const ZOOM_SEQUENCE = SCENES.map((_scene, index) => index);
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
-const ARTWORK_ASPECT_RATIO = 16 / 9;
-const MAX_SUPPORTED_IMAGES = 15;
 const RENDER_AHEAD_LEVELS = 3;
 const STARTUP_DECODE_LEVELS = 4;
 const DECODE_BEHIND_LEVELS = 2;
@@ -214,7 +204,7 @@ const createDefaultTransitions = (): TransitionSettings[] =>
     imageX: preset.imageX,
     imageY: preset.imageY,
     imageScale: preset.imageScale,
-    matte: preset.matte,
+    matte: preset.matte ?? null,
     smoothing: preset.smoothing,
     feather: preset.feather,
     points: clonePoints(preset.points),
@@ -342,19 +332,6 @@ const calculateCameraForAnchor = (
   return { placements, currentPlacement, cameraX, cameraY, viewScale };
 };
 
-const calculateCanonicalCameraAtDepth = (transitions: TransitionSettings[], depth: number) => {
-  const level = Math.min(Math.floor(depth), MAX_DEPTH);
-  const nextLevel = Math.min(level + 1, MAX_DEPTH);
-  const levelProgress = nextLevel === level ? 0 : depth - level;
-  return calculateCameraForAnchor(
-    transitions,
-    0,
-    level,
-    nextLevel,
-    levelProgress,
-  );
-};
-
 const getCanvasMask = (settings: MaskStyle, featherOverride?: number) => {
   const feather = featherOverride ?? settings.feather;
   const cacheKey = JSON.stringify([settings.smoothing, feather, settings.points]);
@@ -422,7 +399,7 @@ function CanvasZoomRenderer({
   viewport: { width: number; height: number };
   hidden: boolean;
   cacheRevision: number;
-  cameraOverride?: { x: number; y: number; viewScale: number };
+  cameraOverride?: { x: number; y: number; anchorLevel: number; viewScale: number };
   renderBuffers?: Array<{ anchorLevel: number; opacity: number }>;
   opaque: boolean;
 }) {
@@ -512,12 +489,12 @@ function CanvasZoomRenderer({
       );
       const camera = cameraOverride
         ? (() => {
-            const framePlacement = calculatedCamera.placements[0] ?? {
+            const framePlacement = calculatedCamera.placements[cameraOverride.anchorLevel] ?? {
               centerX: 0.5,
               centerY: 0.5,
               scale: 1,
             };
-            const frameScale = Math.max(framePlacement.scale, 0.000001);
+            const frameScale = framePlacement.scale;
             return {
               ...calculatedCamera,
               cameraX: framePlacement.centerX + frameScale * (cameraOverride.x - 0.5),
@@ -537,13 +514,11 @@ function CanvasZoomRenderer({
       renderContext.globalAlpha = opacity;
       const layersToRender = cameraOverride
         ? [...new Set([
-            Math.max(1, bufferAnchor),
-            Math.max(1, bufferAnchor + 1),
-            Math.max(1, bufferAnchor + 2),
-            Math.max(1, bufferAnchor + 3),
-            Math.max(1, level - 1),
-            Math.max(1, level),
-            Math.max(1, nextLevel),
+            Math.max(0, level - 2),
+            Math.max(0, level - 1),
+            level, nextLevel,
+            Math.min(MAX_DEPTH, level + 2),
+            Math.min(MAX_DEPTH, level + 3),
           ])]
           .filter((layer) => layer <= MAX_DEPTH)
           .sort((first, second) => first - second)
@@ -572,18 +547,20 @@ function CanvasZoomRenderer({
         // belongs to the fixed parent aperture, not to an enlarged child image.
         const parent = camera.placements[layer - 1];
         const entry = transitions[layer - 1];
-        if (parent && entry) {
+        if (parent && entry && entry.matte) {
           const pw = artworkWidth * camera.viewScale * parent.scale * entry.portalScale / 100 * pixelRatio;
           const ph = artworkHeight * camera.viewScale * parent.scale * entry.portalScale / 100 * pixelRatio;
           const px = toScreenX(parent.centerX + parent.scale * (entry.portalX / 100 - 0.5)) - pw / 2;
           const py = toScreenY(parent.centerY + parent.scale * (entry.portalY / 100 - 0.5)) - ph / 2;
-          layerContext.fillStyle = entry.matte ?? "#ffffff";
+          layerContext.fillStyle = entry.matte;
           layerContext.fillRect(Math.max(0, px), Math.max(0, py),
             Math.max(0, Math.min(renderWidth, px + pw) - Math.max(0, px)),
             Math.max(0, Math.min(renderHeight, py + ph) - Math.max(0, py)));
         }
-        drawClippedImage(layerContext, image, layerCenterX - layerWidth / 2,
-          layerCenterY - layerHeight / 2, layerWidth, layerHeight, renderWidth, renderHeight);
+        const bounds = containedArtwork(SCENES[layer].width, SCENES[layer].height);
+        drawClippedImage(layerContext, image, layerCenterX + (bounds.x - 0.5) * layerWidth,
+          layerCenterY + (bounds.y - 0.5) * layerHeight,
+          layerWidth * bounds.width, layerHeight * bounds.height, renderWidth, renderHeight);
 
         if (layer > 0) {
           maskContext.setTransform(1, 0, 0, 1, 0, 0);
@@ -871,7 +848,7 @@ function ZoomLayer({
 
       {hasNextLayer && transition ? (
         <div className="zoom-portal" style={portalStyle}>
-          <div className="zoom-portal__mask" style={{ ...maskStyle, backgroundColor: transition.matte ?? "#ffffff" }}>
+          <div className="zoom-portal__mask" style={{ ...maskStyle, backgroundColor: transition.matte ?? "transparent" }}>
             <div className="zoom-portal__content" style={contentStyle}>
               <ZoomLayer
                 level={level + 1}
@@ -937,7 +914,7 @@ export default function Home() {
   const depthRef = useRef(0);
   const pendingDepthRef = useRef(0);
   const depthFrameRef = useRef(0);
-  const pendingManualCameraRef = useRef({ x: 0.5, y: 0.5 });
+  const pendingManualCameraRef = useRef({ x: 0.5, y: 0.5, anchorLevel: 0 });
   const manualCameraDirtyRef = useRef(false);
 
   const [assetsReady, setAssetsReady] = useState(false);
@@ -955,7 +932,7 @@ export default function Home() {
   const [transitions, setTransitions] = useState(createDefaultTransitions);
   const sharedMasks = useSharedMasks(transitions, setTransitions, developerMode, maskIsDragging);
   const [updateError, setUpdateError] = useState("");
-  const [manualCamera, setManualCamera] = useState({ x: 0.5, y: 0.5 });
+  const [manualCamera, setManualCamera] = useState({ x: 0.5, y: 0.5, anchorLevel: 0 });
   const manualCameraRef = useRef(manualCamera);
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
   const [imageCacheRevision, setImageCacheRevision] = useState(0);
@@ -965,7 +942,9 @@ export default function Home() {
   const zoomScaleMapping = useMemo(() => createZoomScaleMapping(
     calculateLayerPlacements(transitions, 0).map((placement) => 1 / placement!.scale),
   ), [transitions]);
-  const manualBaseViewScale = calculateCanonicalCameraAtDepth(transitions, depth).viewScale;
+  const localScaleAt = (value: number, anchor = manualCameraRef.current.anchorLevel) =>
+    zoomScaleMapping.scaleAtDepth(value) / zoomScaleMapping.scaleAtDepth(anchor);
+  const manualBaseViewScale = zoomScaleMapping.scaleAtDepth(depth) / zoomScaleMapping.scaleAtDepth(manualCamera.anchorLevel);
 
   const setWelcomeParallax = useCallback((x: number, y: number) => {
     const scene = welcomeRef.current;
@@ -1107,29 +1086,6 @@ export default function Home() {
     };
   }, [experienceMode, preloadLevel]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const warmEncodedFiles = async () => {
-      for (const scene of SCENES) {
-        if (controller.signal.aborted) return;
-        try {
-          const response = await fetch(scene.src, {
-            cache: "force-cache",
-            signal: controller.signal,
-          });
-          if (response.ok) await response.blob();
-        } catch {
-          if (controller.signal.aborted) return;
-        }
-      }
-    };
-    const warmupTimer = window.setTimeout(warmEncodedFiles, 1200);
-    return () => {
-      window.clearTimeout(warmupTimer);
-      controller.abort();
-    };
-  }, []);
-
   useEffect(() => () => {
     ACTIVE_IMAGE_SOURCES.clear();
     releaseScenesOutside(ACTIVE_IMAGE_SOURCES);
@@ -1150,10 +1106,14 @@ export default function Home() {
 
   const commitDepth = useCallback((value: number) => {
     const nextDepth = clamp(value, 0, MAX_DEPTH);
+    const rebased = rebaseCamera(manualCameraRef.current, Math.floor(nextDepth), transitions);
+    manualCameraRef.current = rebased;
+    pendingManualCameraRef.current = rebased;
+    manualCameraDirtyRef.current = true;
     depthRef.current = nextDepth;
     pendingDepthRef.current = nextDepth;
     scheduleVisualCommit();
-  }, [scheduleVisualCommit]);
+  }, [scheduleVisualCommit, transitions]);
 
   useEffect(() => () => window.cancelAnimationFrame(depthFrameRef.current), []);
 
@@ -1177,8 +1137,9 @@ export default function Home() {
     const horizontalReach = clamp(viewport.width / (2 * canvasWidth * safeScale), 0, 0.5);
     const verticalReach = clamp(viewport.height / (2 * canvasHeight * safeScale), 0, 0.5);
     const nextCamera = {
-      x: clamp(x, horizontalReach, 1 - horizontalReach),
-      y: clamp(y, verticalReach, 1 - verticalReach),
+      anchorLevel: manualCameraRef.current.anchorLevel,
+      x: manualCameraRef.current.anchorLevel === 0 ? clamp(x, horizontalReach, 1 - horizontalReach) : x,
+      y: manualCameraRef.current.anchorLevel === 0 ? clamp(y, verticalReach, 1 - verticalReach) : y,
     };
     manualCameraRef.current = nextCamera;
     pendingManualCameraRef.current = nextCamera;
@@ -1187,6 +1148,7 @@ export default function Home() {
   }, [canvasHeight, canvasWidth, manualBaseViewScale, scheduleVisualCommit, viewport]);
 
   const resetManualCamera = useCallback(() => {
+    manualCameraRef.current = { x: 0.5, y: 0.5, anchorLevel: 0 };
     setManualCameraPosition(0.5, 0.5, 1);
   }, [setManualCameraPosition]);
 
@@ -1194,15 +1156,14 @@ export default function Home() {
     setEditingTransition(index);
     setSelectedPoint(0);
     const targetDepth = Math.min(index + 0.45, MAX_DEPTH);
-    const parent = calculateLayerPlacements(transitions, 0)[index];
     const entry = transitions[index];
-    if (parent && entry) {
-      setManualCameraPosition(parent.centerX + parent.scale * (entry.portalX / 100 - 0.5),
-        parent.centerY + parent.scale * (entry.portalY / 100 - 0.5),
-        calculateCanonicalCameraAtDepth(transitions, targetDepth).viewScale);
+    if (entry) {
+      manualCameraRef.current = { x: entry.portalX / 100, y: entry.portalY / 100, anchorLevel: index };
+      setManualCameraPosition(entry.portalX / 100, entry.portalY / 100,
+        zoomScaleMapping.scaleAtDepth(targetDepth) / zoomScaleMapping.scaleAtDepth(index));
     }
     commitDepth(targetDepth);
-  }, [commitDepth, setManualCameraPosition, transitions]);
+  }, [commitDepth, setManualCameraPosition, transitions, zoomScaleMapping]);
 
   const startExperience = () => {
     if (!assetsReady || !sharedMasks.ready) return;
@@ -1263,7 +1224,7 @@ export default function Home() {
         distance: Math.max(distanceBetween(positions), 1),
         cameraX: manualCameraRef.current.x,
         cameraY: manualCameraRef.current.y,
-        viewScale: zoomScaleMapping.scaleAtDepth(depthRef.current),
+        viewScale: localScaleAt(depthRef.current),
         focusX: focus.x,
         focusY: focus.y,
       };
@@ -1278,7 +1239,7 @@ export default function Home() {
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointersRef.current.size < 2) {
       if (experienceMode !== "manual" || !panOriginRef.current) return;
-      const parentScreenScale = Math.max(zoomScaleMapping.scaleAtDepth(depthRef.current), 0.001);
+      const parentScreenScale = Math.max(localScaleAt(depthRef.current), 0.001);
       setManualCameraPosition(
         panOriginRef.current.cameraX - (event.clientX - panOriginRef.current.x) / (canvasWidth * parentScreenScale),
         panOriginRef.current.cameraY - (event.clientY - panOriginRef.current.y) / (canvasHeight * parentScreenScale),
@@ -1289,7 +1250,7 @@ export default function Home() {
     if (!gestureOriginRef.current) return;
     const positions = Array.from(pointersRef.current.values()).slice(0, 2);
     const distance = Math.max(distanceBetween(positions), 1);
-    const requestedScale = gestureOriginRef.current.viewScale
+    const requestedScale = zoomScaleMapping.scaleAtDepth(depthRef.current)
       * distance / gestureOriginRef.current.distance;
     const nextDepth = zoomScaleMapping.depthAtScale(requestedScale);
     if (experienceMode === "manual") {
@@ -1297,12 +1258,15 @@ export default function Home() {
         x: (positions[0].x + positions[1].x) / 2,
         y: (positions[0].y + positions[1].y) / 2,
       };
-      const nextViewScale = zoomScaleMapping.scaleAtDepth(nextDepth);
+      const nextViewScale = localScaleAt(nextDepth);
       const camera = cameraForPinch(gestureOriginRef.current, focus, nextViewScale,
         viewport, { width: canvasWidth, height: canvasHeight });
       setManualCameraPosition(camera.x, camera.y, nextViewScale);
     }
     commitDepth(nextDepth);
+    gestureOriginRef.current = { distance, cameraX: manualCameraRef.current.x,
+      cameraY: manualCameraRef.current.y, viewScale: localScaleAt(nextDepth),
+      focusX: (positions[0].x + positions[1].x) / 2, focusY: (positions[0].y + positions[1].y) / 2 };
   };
 
   const handleZoomPointerEnd = (event: PointerEvent<HTMLElement>) => {
@@ -1320,8 +1284,8 @@ export default function Home() {
     setHasInteracted(true);
     const nextDepth = clamp(depthRef.current - event.deltaY * 0.0018, 0, MAX_DEPTH);
     if (experienceMode === "manual") {
-      const currentViewScale = manualBaseViewScale;
-      const nextViewScale = calculateCanonicalCameraAtDepth(transitions, nextDepth).viewScale;
+      const currentViewScale = localScaleAt(depthRef.current);
+      const nextViewScale = localScaleAt(nextDepth);
       const focusX = (event.clientX - viewport.width / 2) / canvasWidth;
       const focusY = (event.clientY - viewport.height / 2) / canvasHeight;
       setManualCameraPosition(
@@ -1363,10 +1327,7 @@ export default function Home() {
   // produce enormous transforms that push the handles out of the viewport.
   const anchorLevel = developerMode ? editingTransition : experienceMode === "guided"
     ? level
-    : Math.max(
-        0,
-        Math.floor(Math.max(0, depth - REBASE_DELAY)) - 1,
-      );
+    : manualCamera.anchorLevel;
   const nextLevel = Math.min(level + 1, MAX_DEPTH);
   const levelProgress = nextLevel === level ? 0 : depth - level;
   const activeCamera = calculateCameraForAnchor(
@@ -1404,8 +1365,8 @@ export default function Home() {
         : 0.001;
     return { anchorLevel: bufferAnchor, opacity };
   });
-  const manualFramePlacement = activeCamera.placements[0] ?? { centerX: 0.5, centerY: 0.5, scale: 1 };
-  const manualFrameScale = Math.max(manualFramePlacement.scale, 0.000001);
+  const manualFramePlacement = activeCamera.placements[manualCamera.anchorLevel] ?? { centerX: 0.5, centerY: 0.5, scale: 1 };
+  const manualFrameScale = manualFramePlacement.scale;
   const manualLocalCameraX =
     manualFramePlacement.centerX + manualFrameScale * (manualCamera.x - 0.5);
   const manualLocalCameraY =
@@ -1425,11 +1386,6 @@ export default function Home() {
   const viewScale = maskIsDragging && cameraLock
     ? cameraLock.scale
     : calculatedViewScale;
-  const manualBaseImageStyle: CSSProperties = {
-    width: canvasWidth,
-    height: canvasHeight,
-    transform: `translate3d(calc(-50% + ${(0.5 - manualCamera.x) * canvasWidth * manualBaseViewScale}px), calc(-50% + ${(0.5 - manualCamera.y) * canvasHeight * manualBaseViewScale}px), 0) scale(${manualBaseViewScale})`,
-  };
   const panelWidth = Math.min(360, viewport.width * 0.42);
   const editorOffsetX = developerMode && workspaceShifted && viewport.width >= 680
     ? -(panelWidth / 2 + 12)
@@ -1520,11 +1476,6 @@ export default function Home() {
         onPointerDown={handleZoomPointerDown} onPointerMove={handleZoomPointerMove}
         onPointerUp={handleZoomPointerEnd} onPointerCancel={handleZoomPointerEnd}
         onWheel={handleWheel} onKeyDown={handleZoomKeyDown}>
-        {experienceMode === "manual" ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img className="manual-base-image" src={SCENES[0].src} alt="" aria-hidden="true"
-            draggable="false" style={manualBaseImageStyle} />
-        ) : null}
         <CanvasZoomRenderer
           key={experienceMode}
           depth={depth}
@@ -1534,7 +1485,7 @@ export default function Home() {
           cacheRevision={imageCacheRevision}
           opaque={experienceMode === "guided"}
           cameraOverride={experienceMode === "manual"
-            ? { x: manualCamera.x, y: manualCamera.y, viewScale: manualBaseViewScale }
+            ? { ...manualCamera, viewScale: manualBaseViewScale }
             : undefined}
           renderBuffers={experienceMode === "manual"
             ? [{ anchorLevel, opacity: 1 }]
@@ -1612,7 +1563,7 @@ export default function Home() {
               {updateError ? <p role="alert">{updateError}</p> : null}
             </section>
             <div className="editor-workspace-actions">
-              <span>Demo: {ZOOM_SEQUENCE.length} de hasta {MAX_SUPPORTED_IMAGES} imágenes 4K</span>
+              <span>{ZOOM_SEQUENCE.length} imágenes 4K · {transitions.length} transiciones</span>
               <button type="button" onClick={() => setWorkspaceShifted(!workspaceShifted)}>
                 {workspaceShifted ? "Centrar visual" : "Vista a la izquierda"}
               </button>
@@ -1674,6 +1625,18 @@ export default function Home() {
             <section className="editor-section">
               <div className="editor-section__title"><h3>Imagen insertada</h3></div>
               <p>La imagen completa queda dentro del contorno fijo. El reborde recibe el feather, sin recortar los textos.</p>
+              <label className="editor-select editor-select--background">
+                <span>Fondo de la máscara</span>
+                <select value={activeTransition.matte ?? "none"}
+                  onChange={(event) => updateTransition({ matte: event.target.value === "none" ? null : event.target.value })}>
+                  <option value="none">Sin relleno (transparente)</option>
+                  <option value="#ffffff">Blanco</option>
+                  {activeTransition.matte && activeTransition.matte !== "#ffffff" ? (
+                    <option value={activeTransition.matte}>Color guardado ({activeTransition.matte})</option>
+                  ) : null}
+                </select>
+              </label>
+              <p>Sin relleno se ve la escena anterior a través de las zonas transparentes. El fondo blanco es opcional y se guarda al publicar.</p>
               <button type="button" onClick={() => {
                 const mask = getCanvasMask(activeTransition);
                 const integral = MASK_OPAQUE_CACHE.get(mask);

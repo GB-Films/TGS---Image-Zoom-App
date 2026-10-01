@@ -1,99 +1,35 @@
-# TGS · Zoom infinito para iPad
+# TGS · Zoom infinito
 
-Prototipo de una experiencia interactiva para eventos presenciales. Después de
-la portada de TGS, el visitante puede hacer un gesto de zoom para entrar de
-forma continua en una secuencia de imágenes.
+Experiencia de Zoom libre para iPad, celulares y computadoras, publicada en GitHub Pages.
 
-## Funcionamiento actual
+## Colección actual
 
-- Zoom con dos dedos en iPad y pantallas táctiles.
-- Rueda del mouse o trackpad como alternativa en computadoras.
-- La persona controla la profundidad, mientras la cámara se centra
-  automáticamente en el punto correcto de cada escena.
-- Las imágenes iniciales se solicitan y decodifican antes de habilitar
-  **Comenzar**. Los niveles posteriores se preparan de forma escalonada.
-- En modo usuario, todas las escenas visibles se componen en un único lienzo.
-  No hay árboles visuales superpuestos, fundidos entre copias ni reemplazos al
-  cruzar una unión.
-- Cada imagen insertada usa una máscara fija con feather que crece junto con el
-  nivel y mantiene estable la fusión durante el zoom.
-- El botón **Ajustar máscaras** abre un modo desarrollador visual. Para cada
-  unión permite arrastrar, agregar y quitar puntos; regular suavizado y feather;
-  mover y escalar la imagen; y ajustar la posición y tamaño de la entrada.
-- Las máscaras usan coordenadas propias de la imagen sobre un lienzo 16:9. La
-  rotación del iPad cambia el recorte visible, no el polígono.
-- Los puntos conservan un área táctil amplia. El editor incluye formas iniciales
-  de círculo, cuadrado y triángulo.
-- El control central verde mueve la máscara completa y también actualiza el
-  objetivo real de la cámara.
-- En pantallas anchas, el lienzo puede desplazarse para dejar libre el panel. En
-  pantallas angostas, el panel pasa a una bandeja inferior desplazable.
-- Los ajustes se guardan automáticamente en el navegador.
-- Siete escenas 4K WebP reales forman el recorrido de prueba actual.
-- Botón **Reiniciar**, manifest, iconos y metadatos básicos de PWA.
+26 ilustraciones WebP con transparencia, ancho 3840 px y proporciones originales. El orden y los recursos están en `app/scenes.json`; las 25 transiciones centrales, en `app/transition-presets.json`. Cada imagen se encaja completa dentro de su máscara fija y feather. La persona decide la dirección del zoom y el pellizco sigue la apertura real de sus dedos.
 
-Las imágenes definitivas podrán reemplazarse sin cambiar la mecánica. La
-configuración se encuentra en `app/page.tsx` y los recursos visuales en
-`public/scenes/`.
+Se preparan cuatro imágenes al inicio y tres por delante durante el recorrido. La cámara trabaja en coordenadas locales para conservar precisión en los niveles profundos. Los PNG maestros, pruebas y originales quedan fuera de los archivos publicados.
 
-## Continuidad y rendimiento
+## Edición y guardado
 
-La estructura contempla hasta 15 imágenes 4K. La reproducción pública usa un
-compositor Canvas 2D persistente: cada cuadro se dibuja con una sola cámara y
-solo mantiene el nivel anterior y los tres siguientes. La resolución interna se
-limita para no saturar la GPU del iPad. El feather se rasteriza una sola vez por
-configuración y luego la máscara resultante se reutiliza durante todo el gesto.
+«Ajustar máscaras» requiere la contraseña del proyecto. Los cambios son una vista previa hasta «Publicar para todos»; se guardan en el servicio existente y se ven en cualquier dispositivo. Cada máscara puede tener fondo blanco o no tener relleno. La colección nueva conserva un historial independiente de las siete uniones antiguas; no borra publicaciones anteriores.
 
-La memoria usa una ventana deslizante de hasta cinco escenas: dos niveles por
-detrás y dos por delante del nivel actual. Las imágenes se decodifican como
-`ImageBitmap` cuando el navegador lo permite y se cierran explícitamente al
-salir de esa ventana. Nunca se procesan más de dos decodificaciones a la vez.
+Ver [secuencia y revisión](docs/production-scenes.md) y [servicio compartido](docs/mask-service.md).
 
-Los siete WebP se descargan progresivamente a la caché HTTP sin abrirlos todos
-en memoria. De esa manera, las escenas futuras suelen estar disponibles
-localmente al llegar a ellas, pero solo las cercanas consumen memoria gráfica.
+## Desarrollo y pruebas
 
-La posición de la cámara y el logaritmo de su escala recorren una spline cúbica
-de tangentes cortas. El recorrido se mantiene cerca de la línea directa entre
-centros sin producir un quiebre al atravesar una unión. Al normalizar las coordenadas, los niveles
-anteriores se recuperan mediante la transformación inversa exacta; la spline no
-cambia de centro, escala ni velocidad.
-
-El editor conserva la estructura HTML necesaria para seleccionar y arrastrar
-los puntos, pero esa estructura no se monta en modo usuario. Así no puede
-aparecer una segunda copia semitransparente durante la reproducción.
-
-Los eventos táctiles se agrupan por cuadro de pantalla para que una ráfaga de
-movimientos no provoque más actualizaciones de las que puede mostrar el iPad.
-El guardado local también se agrupa para evitar escrituras durante cada
-movimiento del dedo.
-
-## Uso local
-
-Requiere Node.js 22.13 o posterior.
-
-```bash
-npm install
+```powershell
+npm ci
 npm run dev
-```
-
-La app queda disponible en `http://localhost:3000`.
-
-Para verla desde un iPad conectado a la misma red Wi-Fi, abrir en Safari la IP
-local de la computadora seguida de `:3000`. Ejemplo:
-`http://192.168.1.20:3000`.
-
-## Verificación
-
-```bash
 npm run build
-npm test
-npm run lint
+node --test tests/*.test.mjs
 ```
 
-## Próximas imágenes
+GitHub Actions compila y publica Pages al actualizar `main`. `npm run build:service` genera un artefacto separado del servicio y reemplaza `dist`; volver a compilar el visor antes de ejecutar sus pruebas de HTML. En Windows, el cierre del proceso de prerenderizado puede fallar por una aserción nativa de libuv después de generar los archivos: no confundirlo con un build verificado de código cero; la publicación se comprueba también en el entorno Linux de GitHub.
 
-Para que la fusión final resulte perfecta, cada imagen debe contener visualmente
-el entorno donde aparecerá la escena siguiente. Conviene registrar las
-coordenadas del objetivo y procurar continuidad de color, luz, perspectiva y
-textura en ambos lados de la unión.
+Para revisar los encajes iniciales:
+
+```powershell
+node scripts/fit-masks.mjs
+node scripts/preview-masks.mjs
+```
+
+Los detalles se generan en `outputs/masks`, ignorado por Git. La revisión de fluidez en un celular físico sigue siendo necesaria además de las pruebas automatizadas.

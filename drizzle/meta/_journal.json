@@ -8,6 +8,13 @@
       "when": 1788994956535,
       "tag": "0000_first_obadiah_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790877587474,
+      "tag": "0001_furry_skin",
+      "breakpoints": true
     }
   ]
 }

@@ -38,8 +38,8 @@ test("includes installable web app metadata and early image fetches", async () =
   assert.match(layout, /manifest:\s*publicAsset\("\/manifest\.webmanifest"\)/);
   assert.match(layout, /appleWebApp/);
   assert.match(layout, /rel="preload"/);
-  assert.match(layout, /tgs-01-oficina\.webp/);
-  assert.match(layout, /tgs-02-operario-cartelera\.webp/);
+  assert.match(layout, /scenes.slice\(0, 4\)/);
+  assert.match(layout, /publicAsset\(scene.src\)/);
   assert.equal(webManifest.short_name, "TGS");
   assert.equal(webManifest.display, "standalone");
   assert.equal(webManifest.icons.length, 2);
@@ -49,7 +49,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(page, /ZOOM_SEQUENCE = \[0, 1, 2, 3, 4, 5, 6, 7\]/);
+  assert.match(page, /ZOOM_SEQUENCE = SCENES.map/);
   assert.match(page, /Promise\.all\(uniqueSources\.map\(loadDecodedScene\)\)/);
   assert.match(page, /window\.createImageBitmap\(blob\)/);
   assert.match(page, /level=\{level \+ 1\}/);
@@ -69,7 +69,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /globalCompositeOperation = "copy"/);
   assert.match(page, /Keep the last complete frame visible/);
   assert.match(page, /opacity <= 0\.01/);
-  assert.match(page, /bufferAnchor \+ 2/);
+  assert.match(page, /level \+ 2/);
   assert.match(page, /bufferAnchor \+ 3/);
   assert.match(page, /preloadLevel \+ 2/);
   assert.match(page, /preloadLevel \+ 3/);
@@ -82,8 +82,8 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /blurMaskAlpha/);
   assert.match(page, /Ajustar máscaras/);
   assert.match(page, /useSharedMasks\(transitions, setTransitions, developerMode, maskIsDragging\)/);
-  assert.match(page, /ARTWORK_ASPECT_RATIO = 16 \/ 9/);
-  assert.match(page, /MAX_SUPPORTED_IMAGES = 15/);
+  assert.match(page, /containedArtwork/);
+  assert.match(page, /rebaseCamera/);
   assert.match(page, /MASK_PRESETS/);
   assert.match(page, /editorHandleScale/);
   assert.match(page, /Math\.floor\(depth\) \+ 1/);

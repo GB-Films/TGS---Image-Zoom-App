@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { validateMasks, validateSnapshot, type MaskSettings } from "../shared/mask-settings.mjs";
+import { SCENE_COLLECTION, validateMasks, validateSnapshot, type MaskSettings } from "../shared/mask-settings.mjs";
 
 type Snapshot = ReturnType<typeof validateSnapshot>;
-const DRAFT_KEY = "tgs-mask-draft-shared-v1";
-const LEGACY_KEY = "tgs-zoom-mask-settings-production-8-v3";
+const DRAFT_KEY = `tgs-mask-draft-${SCENE_COLLECTION}`;
 const publicBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export function useSharedMasks(transitions: MaskSettings[], setTransitions: (value: MaskSettings[]) => void,
@@ -34,7 +33,8 @@ export function useSharedMasks(transitions: MaskSettings[], setTransitions: (val
       if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost","127.0.0.1"].includes(url.hostname))) throw new Error("Dirección del servicio inválida.");
       endpoint.current = url.origin;
     }
-    const response = await fetch(`${endpoint.current}${path}`,{
+    const collectionPath = path === "/masks" ? `${path}?collection=${SCENE_COLLECTION}` : path;
+    const response = await fetch(`${endpoint.current}${collectionPath}`,{
       ...init,signal,cache:"no-store",credentials:"omit",
       headers:{"Content-Type":"application/json",...init.headers},
     });
@@ -124,11 +124,10 @@ export function useSharedMasks(transitions: MaskSettings[], setTransitions: (val
   const restoreDraft = () => {
     try {
       const raw = window.localStorage.getItem(DRAFT_KEY);
-      const legacy = raw ? null : window.localStorage.getItem(LEGACY_KEY);
-      if (!raw && !legacy) { setMessage("No hay un borrador guardado en este navegador."); return; }
-      const draft = raw ? JSON.parse(raw) : {transitions:JSON.parse(legacy!)};
+      if (!raw) { setMessage("No hay un borrador guardado en este navegador."); return; }
+      const draft = JSON.parse(raw);
       setTransitions(validateMasks(draft.transitions));
-      setMessage("Borrador recuperado. Revisá las siete uniones antes de publicar sobre la versión actual.");
+      setMessage("Borrador recuperado. Revisá las 25 uniones antes de publicar sobre la versión actual.");
     } catch { setMessage("No se pudo recuperar el borrador. La versión publicada sigue intacta."); }
   };
 
