@@ -43,7 +43,8 @@ test("fill accepts only null or explicit hex colors", () => {
 
 test("canvas, editor and fitting scripts do not introduce implicit white", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /if \(parent && entry && entry\.matte\) \{[\s\S]*?layerContext\.fillStyle = entry\.matte;/);
+  assert.match(page, /if \(parent && entry && entry\.matte\) \{/);
+  assert.match(page, /if \(matteRect && entry\?\.matte\) \{\s*target\.fillStyle = entry\.matte;/);
   assert.match(page, /backgroundColor: transition\.matte \?\? "transparent"/);
   assert.doesNotMatch(page, /matte \?\? "#ffffff"/);
   assert.match(page, /Fondo de la máscara/);

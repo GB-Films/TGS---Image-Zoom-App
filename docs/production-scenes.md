@@ -14,7 +14,15 @@ El fondo general del visor es blanco; esto no aplana el alpha del archivo ni agr
 
 Solo Zoom libre está disponible. El pellizco usa la relación real entre distancias de los dedos, manteniendo el foco de contacto. La cámara cambia de origen local en cada nivel, para no perder precisión en las últimas imágenes. Ese cambio no altera la composición en pantalla. La rueda conserva su control independiente.
 
-Se preparan cuatro imágenes al inicio. La ventana conserva dos niveles anteriores y tres siguientes, más la portada, con un máximo de dos decodificaciones simultáneas. No se descarga toda la secuencia de entrada. El compositor mantiene las máscaras de los ancestros y limita resolución de pantalla en móvil sin reducir los archivos 4K.
+Se preparan cuatro imágenes al inicio. La ventana conserva dos niveles anteriores y tres siguientes, con un máximo de dos cargas/decodificaciones simultáneas. Hay versiones transparentes de 768 px en `public/scenes/previews`; las escenas actual, siguiente y anterior también se preparan en 4K. La portada deja de ocupar memoria cuando sale de la ventana. Los 26 recursos 4K permanecen intactos.
+
+El dibujo usa la versión pequeña mientras ocupa hasta 512 píxeles de ancho en el canvas (768 / 1,5); al superar ese tamaño usa el 4K ya preparado. La resolución no cambia las coordenadas ni las máscaras. Si el 4K aún no terminó de cargar se mantiene la imagen pequeña, y al retirar un 4K se conserva hasta que exista su reemplazo. Las precargas del HTML coinciden con las cuatro fuentes iniciales para evitar descargar recursos grandes lejanos.
+
+Las 25 máscaras se rasterizan en tareas breves antes de habilitar «Comenzar», utilizando una superficie de CPU y una sola lectura de píxeles por máscara. El feather y la tabla de opacidad quedan en caché. Al editar se preparan las máscaras nuevas antes de volver a dibujar el visor.
+
+El compositor comprueba todas las máscaras ancestrales contra el rectángulo visible de cada imagen y su relleno explícito. Si ese rectángulo está completamente en su interior opaco, dibuja directamente. Si necesita recorte, compone solo el área afectada; una única máscara no necesita una segunda superficie intermedia. Los cambios conservan rellenos transparentes/blancos, feather, encuadres y cámara local.
+
+La revisión del 2 de octubre utilizó las máscaras publicadas versión 11 sin cambiarlas. En una prueba aislada del motor a 390×844, 351 pasos, los dibujados de más de 16,7 ms bajaron de 63 a 16 y la caché decodificada máxima de 285,0 a 147,5 MiB. Son tiempos de las llamadas de dibujo en un PC, no FPS garantizados ni medición de un celular físico. Las pruebas y comparaciones visuales están en `work/fluidez-2026-10-02`, fuera de Git. Sigue siendo necesaria la revisión de fluidez en el dispositivo del usuario.
 
 ## Guardado compartido
 

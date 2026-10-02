@@ -6,7 +6,9 @@ Experiencia de Zoom libre para iPad, celulares y computadoras, publicada en GitH
 
 26 ilustraciones WebP con transparencia, ancho 3840 px y proporciones originales. El orden y los recursos están en `app/scenes.json`; las 25 transiciones centrales, en `app/transition-presets.json`. Cada imagen se encaja completa dentro de su máscara fija y feather. La persona decide la dirección del zoom y el pellizco sigue la apertura real de sus dedos.
 
-Se preparan cuatro imágenes al inicio y tres por delante durante el recorrido. La cámara trabaja en coordenadas locales para conservar precisión en los niveles profundos. Los PNG maestros, pruebas y originales quedan fuera de los archivos publicados.
+Se preparan cuatro imágenes al inicio y tres por delante durante el recorrido. Las escenas lejanas usan WebP transparentes de 768 px; la actual, la siguiente y la anterior se preparan en 4K. El dibujo elige la fuente según su tamaño en pantalla, conservando el 4K para acercarse. La cámara trabaja en coordenadas locales para conservar precisión en los niveles profundos. Los PNG maestros, pruebas y originales quedan fuera de los archivos publicados.
+
+Las máscaras se preparan antes de habilitar «Comenzar». El compositor evita copias intermedias cuando la imagen cabe en la zona opaca de sus máscaras y procesa solo su zona visible cuando necesita feather o relleno. `npm run images:previews` actualiza las versiones livianas a partir de los 4K aprobados, sin regenerar ilustraciones.
 
 ## Edición y guardado
 

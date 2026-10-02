@@ -13,6 +13,7 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "images:prepare": "node scripts/prepare-scenes.mjs",
+    "images:previews": "node scripts/prepare-scene-previews.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

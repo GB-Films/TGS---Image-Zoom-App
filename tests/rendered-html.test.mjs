@@ -39,7 +39,7 @@ test("includes installable web app metadata and early image fetches", async () =
   assert.match(layout, /appleWebApp/);
   assert.match(layout, /rel="preload"/);
   assert.match(layout, /scenes.slice\(0, 4\)/);
-  assert.match(layout, /publicAsset\(scene.src\)/);
+  assert.match(layout, /publicAsset\(startupSource\(scene.src, index\)\)/);
   assert.equal(webManifest.short_name, "TGS");
   assert.equal(webManifest.display, "standalone");
   assert.equal(webManifest.icons.length, 2);
@@ -71,9 +71,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /opacity <= 0\.01/);
   assert.match(page, /level \+ 2/);
   assert.match(page, /bufferAnchor \+ 3/);
-  assert.match(page, /preloadLevel \+ 2/);
-  assert.match(page, /preloadLevel \+ 3/);
-  assert.match(page, /level <= preloadLevel \+ 1/);
+  assert.match(page, /sceneLoadPlan\(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS\)/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);
