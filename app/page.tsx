@@ -21,7 +21,7 @@ import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
 import { interpolateSpline, createZoomScaleMapping, cameraForPinch } from "./zoom-gesture.mjs";
-import { PREVIEW_WIDTH, previewSource, startupSource, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
+import { PREVIEW_WIDTH, previewSource, startupSceneSources, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
 
 export const dynamic = "force-static";
 
@@ -47,10 +47,10 @@ const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
 
 const SCENES = productionScenes.map(scene => ({ ...scene, src: publicAsset(scene.src) }));
+const STARTUP_IMAGE_SOURCES = startupSceneSources(SCENES);
 const ZOOM_SEQUENCE = SCENES.map((_scene, index) => index);
 const MAX_DEPTH = ZOOM_SEQUENCE.length - 1;
 const RENDER_AHEAD_LEVELS = 3;
-const STARTUP_DECODE_LEVELS = 4;
 const DECODE_BEHIND_LEVELS = 2;
 const DECODE_AHEAD_LEVELS = 3;
 const REBASE_DELAY = 0.18;
@@ -965,9 +965,10 @@ export default function Home() {
   const manualCameraRef = useRef(manualCamera);
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
   const [imageCacheRevision, setImageCacheRevision] = useState(0);
+  const retainedFullSourcesRef = useRef<string[]>([]);
   const readyToStart = assetsReady && sharedMasks.ready && masksReady
-    && SCENES.slice(0, STARTUP_DECODE_LEVELS).every((scene, index) => {
-      const image = DECODED_IMAGE_CACHE.get(startupSource(scene.src, index));
+    && STARTUP_IMAGE_SOURCES.every((source) => {
+      const image = DECODED_IMAGE_CACHE.get(source);
       return image && isDecodedSceneReady(image);
     });
   const preloadLevel = Math.floor(depth);
@@ -1068,14 +1069,9 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    const startupSequence = experienceMode === "guided"
-      ? ZOOM_SEQUENCE
-      : ZOOM_SEQUENCE.slice(0, STARTUP_DECODE_LEVELS);
-    const uniqueSources = [...new Set(
-      startupSequence
-        .map((sceneIndex, index) => experienceMode === "guided"
-          ? SCENES[sceneIndex].src : startupSource(SCENES[sceneIndex].src, index)),
-    )];
+    const uniqueSources = experienceMode === "guided"
+      ? SCENES.map(scene => scene.src)
+      : STARTUP_IMAGE_SOURCES;
     uniqueSources.forEach((src) => ACTIVE_IMAGE_SOURCES.add(src));
     Promise.all(uniqueSources.map(loadDecodedScene)).then((images) => {
       if (!cancelled && images.every(Boolean)) {
@@ -1099,7 +1095,9 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    const plan = sceneLoadPlan(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS);
+    const plan = sceneLoadPlan(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS,
+      retainedFullSourcesRef.current);
+    retainedFullSourcesRef.current = plan.fullSources;
     const desiredSources: Set<string> = experienceMode === "guided"
       ? new Set(SCENES.map(scene => scene.src)) : plan.desired;
     ACTIVE_IMAGE_SOURCES.clear();

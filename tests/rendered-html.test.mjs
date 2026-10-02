@@ -71,7 +71,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /opacity <= 0\.01/);
   assert.match(page, /level \+ 2/);
   assert.match(page, /bufferAnchor \+ 3/);
-  assert.match(page, /sceneLoadPlan\(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS\)/);
+  assert.match(page, /sceneLoadPlan\(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS,\s*retainedFullSourcesRef.current\)/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);
@@ -103,8 +103,9 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /isMobileManual \? 1 : 1\.25/);
   assert.match(page, /isMobileManual \? "medium" : "high"/);
   assert.match(page, /bufferAnchors\.map/);
-  assert.match(page, /STARTUP_DECODE_LEVELS = 4/);
-  assert.match(page, /experienceMode === "guided"\s*\? ZOOM_SEQUENCE/);
+  assert.match(page, /STARTUP_IMAGE_SOURCES = startupSceneSources\(SCENES\)/);
+  assert.match(page, /STARTUP_IMAGE_SOURCES.every/);
+  assert.match(page, /experienceMode === "guided"\s*\? SCENES.map\(scene => scene.src\)/);
   assert.match(page, /warmupContext\.drawImage/);
   assert.match(page, /RENDER_AHEAD_LEVELS = 3/);
   assert.match(page, /fetchPriority=/);

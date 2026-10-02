@@ -12,7 +12,7 @@ test("26 ordered transparent UHD scenes preserve proportions within the download
   assert.equal(sources.length, 26);
   assert.equal(new Set(sources).size, 26);
   assert.match(layout,/scenes.slice\(0, 4\)/);
-  assert.match(page,/STARTUP_DECODE_LEVELS = 4/);
+  assert.match(page,/STARTUP_IMAGE_SOURCES = startupSceneSources\(SCENES\)/);
   assert.match(page,/DECODE_AHEAD_LEVELS = 3/);
   assert.doesNotMatch(page,/warmEncodedFiles|MAX_SUPPORTED_IMAGES = 15/);
   let totalBytes = 0;
