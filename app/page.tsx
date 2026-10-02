@@ -21,7 +21,7 @@ import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
 import { interpolateSpline, createZoomScaleMapping, cameraForPinch } from "./zoom-gesture.mjs";
-import { PREVIEW_WIDTH, previewSource, startupSceneSources, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
+import { MOTION_IDLE_MS, sceneSourceForFrame, startupSceneSources, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
 
 export const dynamic = "force-static";
 
@@ -201,13 +201,8 @@ const releaseScenesOutside = (sources: Set<string>) => {
   }
 };
 
-const getDecodedScene = (source: string, projectedWidth = Infinity) => {
-  const preview = DECODED_IMAGE_CACHE.get(previewSource(source));
-  // A decoded 4K successor can wait in memory until there are enough screen
-  // pixels to use it. Keep the small texture on the GPU while it is far away.
-  if (preview && projectedWidth <= PREVIEW_WIDTH / 1.5) return preview;
-  return DECODED_IMAGE_CACHE.get(source) ?? preview;
-};
+const getDecodedScene = (source: string, projectedWidth = Infinity, moving = false) =>
+  DECODED_IMAGE_CACHE.get(sceneSourceForFrame(source, projectedWidth, moving, DECODED_IMAGE_CACHE));
 
 const clonePoints = (points: MaskPoint[]) => points.map((point) => ({ ...point }));
 
@@ -410,6 +405,7 @@ function CanvasZoomRenderer({
   renderBuffers,
   opaque,
   masksReady,
+  moving = false,
 }: {
   depth: number;
   transitions: TransitionSettings[];
@@ -420,6 +416,7 @@ function CanvasZoomRenderer({
   renderBuffers?: Array<{ anchorLevel: number; opacity: number }>;
   opaque: boolean;
   masksReady: boolean;
+  moving?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -553,7 +550,7 @@ function CanvasZoomRenderer({
         const layerCenterX = toScreenX(placement.centerX);
         const layerCenterY = toScreenY(placement.centerY);
         const bounds = containedArtwork(SCENES[layer].width, SCENES[layer].height);
-        const image = getDecodedScene(SCENES[ZOOM_SEQUENCE[layer]].src, layerWidth * bounds.width);
+        const image = getDecodedScene(SCENES[ZOOM_SEQUENCE[layer]].src, layerWidth * bounds.width, moving);
         if (!image || !isDecodedSceneReady(image)) continue;
         const imageRect = {
           x: layerCenterX + (bounds.x - 0.5) * layerWidth,
@@ -651,11 +648,12 @@ function CanvasZoomRenderer({
       context.drawImage(frameCanvas, 0, 0);
       context.globalCompositeOperation = "source-over";
     }
-  }, [cacheRevision, cameraOverride, depth, hidden, masksReady, opaque, renderBuffers, transitions, viewport]);
+  }, [cacheRevision, cameraOverride, depth, hidden, masksReady, moving, opaque, renderBuffers, transitions, viewport]);
 
   return (
     <canvas
       ref={canvasRef}
+      data-render-quality={moving ? "motion" : "detail"}
       className={`zoom-renderer${hidden ? " zoom-renderer--hidden" : ""}`}
       aria-hidden="true"
     />
@@ -965,7 +963,22 @@ export default function Home() {
   const manualCameraRef = useRef(manualCamera);
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
   const [imageCacheRevision, setImageCacheRevision] = useState(0);
-  const retainedFullSourcesRef = useRef<string[]>([]);
+  const retainedSceneSourcesRef = useRef<string[]>([]);
+  const [isMoving, setIsMoving] = useState(false);
+  const motionActiveRef = useRef(false);
+  const motionTimerRef = useRef(0);
+  const markMotion = useCallback(() => {
+    window.clearTimeout(motionTimerRef.current);
+    if (!motionActiveRef.current) {
+      motionActiveRef.current = true;
+      setIsMoving(true);
+    }
+    motionTimerRef.current = window.setTimeout(() => {
+      motionActiveRef.current = false;
+      setIsMoving(false);
+    }, MOTION_IDLE_MS);
+  }, []);
+  useEffect(() => () => window.clearTimeout(motionTimerRef.current), []);
   const readyToStart = assetsReady && sharedMasks.ready && masksReady
     && STARTUP_IMAGE_SOURCES.every((source) => {
       const image = DECODED_IMAGE_CACHE.get(source);
@@ -1096,8 +1109,8 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     const plan = sceneLoadPlan(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS,
-      retainedFullSourcesRef.current);
-    retainedFullSourcesRef.current = plan.fullSources;
+      retainedSceneSourcesRef.current);
+    retainedSceneSourcesRef.current = plan.retainedSources;
     const desiredSources: Set<string> = experienceMode === "guided"
       ? new Set(SCENES.map(scene => scene.src)) : plan.desired;
     ACTIVE_IMAGE_SOURCES.clear();
@@ -1117,6 +1130,9 @@ export default function Home() {
       // Small, already-positioned previews enter first; upgrades never remove them.
       for (const src of sources) {
         if (DECODED_IMAGE_CACHE.has(src)) continue;
+        // Full-resolution upgrades wait for rest; decoded 4Ks may remain cached
+        // but are never selected by the manual renderer during movement.
+        if (experienceMode === "manual" && isMoving && SCENES.some(scene => scene.src === src)) continue;
         void loadDecodedScene(src).then(decoded => {
           if (cancelled) return;
           releaseScenesOutside(desiredSources);
@@ -1131,7 +1147,7 @@ export default function Home() {
       window.clearTimeout(preloadTimer);
       window.cancelAnimationFrame(refreshFrame);
     };
-  }, [experienceMode, preloadLevel]);
+  }, [experienceMode, preloadLevel, isMoving]);
 
   useEffect(() => () => {
     ACTIVE_IMAGE_SOURCES.clear();
@@ -1139,6 +1155,7 @@ export default function Home() {
   }, []);
 
   const scheduleVisualCommit = useCallback(() => {
+    markMotion();
     if (!depthFrameRef.current) {
       depthFrameRef.current = window.requestAnimationFrame(() => {
         depthFrameRef.current = 0;
@@ -1149,7 +1166,7 @@ export default function Home() {
         }
       });
     }
-  }, []);
+  }, [markMotion]);
 
   const commitDepth = useCallback((value: number) => {
     const nextDepth = clamp(value, 0, MAX_DEPTH);
@@ -1250,6 +1267,7 @@ export default function Home() {
 
   const handleZoomPointerDown = (event: PointerEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("button, input, select, .mask-editor-overlay, .developer-panel")) return;
+    if (experienceMode === "manual") markMotion();
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (experienceMode === "manual" && pointersRef.current.size === 1) {
@@ -1530,6 +1548,7 @@ export default function Home() {
           viewport={viewport}
           hidden={developerMode}
           masksReady={masksReady}
+          moving={experienceMode === "manual" && isMoving}
           cacheRevision={imageCacheRevision}
           opaque={experienceMode === "guided"}
           cameraOverride={experienceMode === "manual"

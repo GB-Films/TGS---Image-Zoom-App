@@ -10,6 +10,8 @@ Antes de habilitar «Comenzar» se preparan las 26 versiones transparentes de 76
 
 Las máscaras se preparan antes de habilitar «Comenzar». El compositor evita copias intermedias cuando la imagen cabe en la zona opaca de sus máscaras y procesa solo su zona visible cuando necesita feather o relleno. `npm run images:previews` actualiza las versiones livianas a partir de los 4K aprobados, sin regenerar ilustraciones.
 
+Durante el movimiento se dibujan fuentes de hasta 2048 px desde `public/scenes/motion`; las lejanas siguen usando 768 px. Tras 350 ms sin cambios de cámara se recupera el 4K en las imágenes cercanas, sin cambiar escala, contornos ni coordenadas. Las nuevas cargas 4K se posponen hasta el reposo; las versiones intermedias también se retienen para reutilizarlas al retroceder. El presupuesto de 256 MiB incluye los tres tamaños. `npm run images:motion` genera los derivados intermedios sin modificar los originales.
+
 ## Edición y guardado
 
 «Ajustar máscaras» requiere la contraseña del proyecto. Los cambios son una vista previa hasta «Publicar para todos»; se guardan en el servicio existente y se ven en cualquier dispositivo. Cada máscara puede tener fondo blanco o no tener relleno. La colección nueva conserva un historial independiente de las siete uniones antiguas; no borra publicaciones anteriores.

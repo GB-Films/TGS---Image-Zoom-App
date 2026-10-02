@@ -71,7 +71,10 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /opacity <= 0\.01/);
   assert.match(page, /level \+ 2/);
   assert.match(page, /bufferAnchor \+ 3/);
-  assert.match(page, /sceneLoadPlan\(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS,\s*retainedFullSourcesRef.current\)/);
+  assert.match(page, /sceneLoadPlan\(SCENES, preloadLevel, DECODE_BEHIND_LEVELS, DECODE_AHEAD_LEVELS,\s*retainedSceneSourcesRef.current\)/);
+  assert.match(page, /moving=\{experienceMode === "manual" && isMoving\}/);
+  assert.match(page, /sceneSourceForFrame\(source, projectedWidth, moving, DECODED_IMAGE_CACHE\)/);
+  assert.match(page, /setIsMoving\(false\)/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);

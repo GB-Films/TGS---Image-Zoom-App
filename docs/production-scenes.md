@@ -26,6 +26,14 @@ La revisión del 2 de octubre utilizó las máscaras publicadas versión 11 sin 
 
 La prueba posterior de precarga completa de previews y retención responde a saltos repetidos observados por el usuario en Safari/iPad Pro. La política anterior hizo ocho decodificaciones 4K y cuatro de previews en cuatro idas y vueltas por el mismo cruce, en una simulación de tablet de escritorio. Las pruebas de la nueva política verifican que las fuentes se reutilizan al oscilar por cualquiera de las 25 uniones y que la retención permanece acotada al recorrer, retroceder y reiniciar. No implica una medición física de Safari ni garantiza eliminar el costo del primer dibujo 4K. Las cifras de 147,5 MiB del párrafo anterior corresponden a la política previa, no a este nuevo presupuesto.
 
+## Resolución durante movimiento — prueba posterior del 2 de octubre
+
+La prueba de precarga no eliminó los tirones reportados en Safari/iPad. En un ensayo de escritorio a 1366×1024 con todas las imágenes ya decodificadas, el dibujo 4K tuvo siete llamadas superiores a 16,7 ms, con un máximo de 62,6 ms. Al usar fuentes de 2048 px hubo una llamada de 18 ms y ningún intervalo entre cuadros superior a 25 ms. Es evidencia del costo de dibujo, no una medición del iPad ni una garantía de FPS en Safari.
+
+El visor usa fuentes intermedias transparentes de 2048 px mientras cambia la cámara, y vuelve al 4K después de 350 ms sin movimiento. Las versiones de 768 px siguen sirviendo para imágenes pequeñas; si una intermedia aún no está lista se conserva el preview, sin recurrir a un 4K durante el gesto. Si el 4K tarda al detenerse se conserva la intermedia hasta que termine. Solo cambia la fuente de píxeles: la posición y el encaje se calculan con las dimensiones originales.
+
+Los 26 derivados están en `public/scenes/motion`, generados con `npm run images:motion` a partir de los WebP aprobados, calidad 90 y alpha exacto respecto del original reescalado. No hay regeneración con IA. Se preparan las primeras dos intermedias antes de «Comenzar» y se mantienen hasta cuatro intermedias cercanas. El plan conserva los previews, tres 4K cercanos y, cuando cabe, un 4K adicional; el presupuesto conjunto de píxeles decodificados es 256 MiB y la nueva carga 4K espera al reposo. La revisión de esta variante requiere probar movimiento y lectura en el dispositivo físico.
+
 ## Guardado compartido
 
 La colección `tgs-2026-10-01` usa 25 máscaras y un historial separado de la colección antigua de ocho imágenes. Los datos antiguos quedan intactos. Los borradores también usan una clave nueva y nunca se aplican automáticamente a visitantes. El servicio y el visor se publican por separado; el servicio debe actualizarse antes del visor para que el editor pueda publicar las nuevas máscaras.
