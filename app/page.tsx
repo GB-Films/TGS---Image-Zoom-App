@@ -1132,7 +1132,7 @@ export default function Home() {
         if (DECODED_IMAGE_CACHE.has(src)) continue;
         // Full-resolution upgrades wait for rest; decoded 4Ks may remain cached
         // but are never selected by the manual renderer during movement.
-        if (experienceMode === "manual" && isMoving && SCENES.some(scene => scene.src === src)) continue;
+        if (experienceMode === "manual" && motionActiveRef.current && SCENES.some(scene => scene.src === src)) continue;
         void loadDecodedScene(src).then(decoded => {
           if (cancelled) return;
           releaseScenesOutside(desiredSources);

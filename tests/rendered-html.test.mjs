@@ -75,6 +75,7 @@ test("mounts a predecoded, continuous nested zoom sequence", async () => {
   assert.match(page, /moving=\{experienceMode === "manual" && isMoving\}/);
   assert.match(page, /sceneSourceForFrame\(source, projectedWidth, moving, DECODED_IMAGE_CACHE\)/);
   assert.match(page, /setIsMoving\(false\)/);
+  assert.match(page, /experienceMode === "manual" && motionActiveRef.current && SCENES.some/);
   assert.match(page, /setManualCameraPosition/);
   assert.match(page, /Pellizcá y arrastrá para elegir la dirección/);
   assert.match(page, /buildClosedPath/);
