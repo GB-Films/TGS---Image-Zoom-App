@@ -10,6 +10,7 @@
     "build": "vinext build",
     "build:service": "node scripts/build-mask-service.mjs",
     "start": "vinext start",
+    "preview": "node scripts/preview-static.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "images:prepare": "node scripts/prepare-scenes.mjs",

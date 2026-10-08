@@ -12,6 +12,14 @@ Las máscaras se preparan antes de habilitar «Comenzar». El compositor evita c
 
 Durante el movimiento se dibujan fuentes de hasta 2048 px desde `public/scenes/motion`; las lejanas siguen usando 768 px. Tras 350 ms sin cambios de cámara se recupera el 4K en las imágenes cercanas, sin cambiar escala, contornos ni coordenadas. Las nuevas cargas 4K se posponen hasta el reposo; las versiones intermedias también se retienen para reutilizarlas al retroceder. El presupuesto de 256 MiB incluye los tres tamaños. `npm run images:motion` genera los derivados intermedios sin modificar los originales.
 
+## Portada, apertura y cierre
+
+La portada adapta la composición a celular vertical y horizontal, con áreas seguras y botones táctiles. Las órbitas y las transiciones usan CSS, sin nuevas imágenes ni dependencias. Los estilos están en `app/experience.css`.
+
+«Comenzar» abre un mensaje con una entrada de luz y órbitas. Tras nueve segundos de lectura continúa automáticamente; «Entrar al recorrido» permite adelantarlo. Al regresar de otra pestaña se reinicia el tiempo de lectura. En la última imagen, seis segundos en reposo abren el agradecimiento; retroceder, mover la cámara, editar u ocultar la pestaña cancela esa espera. El cierre aparece una vez por visita y ofrece volver a la portada o seguir explorando. Reiniciar permite verlo de nuevo.
+
+Los mensajes son diálogos modales que aíslan los gestos del visor y restauran el foco al continuar. Respetan la preferencia de movimiento reducido y permiten continuar con Escape. No cambian los recursos, máscaras ni encuadres de las escenas.
+
 ## Edición y guardado
 
 «Ajustar máscaras» requiere la contraseña del proyecto. Los cambios son una vista previa hasta «Publicar para todos»; se guardan en el servicio existente y se ven en cualquier dispositivo. Cada máscara puede tener fondo blanco o no tener relleno. La colección nueva conserva un historial independiente de las siete uniones antiguas; no borra publicaciones anteriores.
@@ -25,9 +33,12 @@ npm ci
 npm run dev
 npm run build
 node --test tests/*.test.mjs
+npm run preview
 ```
 
 GitHub Actions compila y publica Pages al actualizar `main`. `npm run build:service` genera un artefacto separado del servicio y reemplaza `dist`; volver a compilar el visor antes de ejecutar sus pruebas de HTML. En Windows, el cierre del proceso de prerenderizado puede fallar por una aserción nativa de libuv después de generar los archivos: no confundirlo con un build verificado de código cero; la publicación se comprueba también en el entorno Linux de GitHub.
+
+`npm run preview` sirve la compilación en `http://127.0.0.1:5173` y lee las máscaras publicadas mediante un relay local de solo lectura. Así evita usar por error los presets de respaldo cuando el servicio rechaza el origen local. No permite iniciar sesión ni publicar máscaras; esos ajustes se hacen en la app online.
 
 Para revisar los encajes iniciales:
 

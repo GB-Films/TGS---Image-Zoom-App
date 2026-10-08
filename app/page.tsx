@@ -17,6 +17,7 @@ import productionTransitions from "./transition-presets.json";
 import productionScenes from "./scenes.json";
 import { ARTWORK_ASPECT_RATIO, containedArtwork, rebaseCamera } from "./scene-geometry.mjs";
 import MaskEditorAccess from "./mask-editor-access";
+import ExperienceInterlude from "./experience-interlude";
 import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
@@ -944,6 +945,9 @@ export default function Home() {
 
   const [assetsReady, setAssetsReady] = useState(false);
   const [started, setStarted] = useState(false);
+  const [interlude, setInterlude] = useState<"intro" | "outro" | null>(null);
+  const [endingSeen, setEndingSeen] = useState(false);
+  const [pageVisible, setPageVisible] = useState(true);
   const [experienceMode] = useState<ExperienceMode>("manual");
   const [depth, setDepth] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -979,6 +983,30 @@ export default function Home() {
     }, MOTION_IDLE_MS);
   }, []);
   useEffect(() => () => window.clearTimeout(motionTimerRef.current), []);
+
+  useEffect(() => {
+    const updateVisibility = () => setPageVisible(!document.hidden);
+    updateVisibility();
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => document.removeEventListener("visibilitychange", updateVisibility);
+  }, []);
+
+  useEffect(() => {
+    // A full six seconds on the last scene, after the gesture stops. Backtracking,
+    // editing or hiding the tab cancels the countdown; each visit has one ending.
+    if (!started || interlude || endingSeen || developerMode || !pageVisible || isMoving || depth < MAX_DEPTH - 0.02) return;
+    const timer = window.setTimeout(() => {
+      if (document.hidden || pointersRef.current.size || depthRef.current < MAX_DEPTH - 0.02) return;
+      setEndingSeen(true);
+      setInterlude("outro");
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [depth, developerMode, endingSeen, interlude, isMoving, pageVisible, started]);
+
+  const continueExperience = useCallback(() => {
+    setInterlude(null);
+    window.requestAnimationFrame(() => zoomRef.current?.focus());
+  }, []);
   const readyToStart = assetsReady && sharedMasks.ready && masksReady
     && STARTUP_IMAGE_SOURCES.every((source) => {
       const image = DECODED_IMAGE_CACHE.get(source);
@@ -1233,8 +1261,9 @@ export default function Home() {
     if (!readyToStart) return;
     resetManualCamera();
     setStarted(true);
+    setEndingSeen(false);
+    setInterlude("intro");
     setHasInteracted(false);
-    window.requestAnimationFrame(() => zoomRef.current?.focus());
   };
 
   const restartExperience = () => {
@@ -1254,6 +1283,9 @@ export default function Home() {
     setMaskIsDragging(false);
     setCameraLock(null);
     setStarted(false);
+    setInterlude(null);
+    setEndingSeen(false);
+    window.requestAnimationFrame(() => welcomeRef.current?.querySelector<HTMLButtonElement>(".start-button")?.focus());
   };
 
   const handleWelcomePointerMove = (event: PointerEvent<HTMLElement>) => {
@@ -1266,6 +1298,7 @@ export default function Home() {
   };
 
   const handleZoomPointerDown = (event: PointerEvent<HTMLElement>) => {
+    if (!started || interlude) return;
     if ((event.target as HTMLElement).closest("button, input, select, .mask-editor-overlay, .developer-panel")) return;
     if (experienceMode === "manual") markMotion();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1299,6 +1332,7 @@ export default function Home() {
   };
 
   const handleZoomPointerMove = (event: PointerEvent<HTMLElement>) => {
+    if (interlude) return;
     if (!pointersRef.current.has(event.pointerId)) return;
     event.preventDefault();
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -1336,6 +1370,7 @@ export default function Home() {
 
   const handleZoomPointerEnd = (event: PointerEvent<HTMLElement>) => {
     if (!pointersRef.current.has(event.pointerId)) return;
+    markMotion();
     pointersRef.current.delete(event.pointerId);
     gestureOriginRef.current = null;
     const remainingPointer = pointersRef.current.values().next().value;
@@ -1345,6 +1380,7 @@ export default function Home() {
   };
 
   const handleWheel = (event: WheelEvent<HTMLElement>) => {
+    if (!started || interlude) return;
     event.preventDefault();
     setHasInteracted(true);
     const nextDepth = clamp(depthRef.current - event.deltaY * 0.0018, 0, MAX_DEPTH);
@@ -1363,6 +1399,7 @@ export default function Home() {
   };
 
   const handleZoomKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!started || interlude || (event.target as HTMLElement).closest("button, input, select")) return;
     if (experienceMode === "manual" && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       event.preventDefault();
       setHasInteracted(true);
@@ -1510,25 +1547,36 @@ export default function Home() {
           onPointerMove={handleWelcomePointerMove} onPointerLeave={resetWelcomeParallax}>
           <div className="ambient-orb ambient-orb--top" aria-hidden="true" />
           <div className="ambient-orb ambient-orb--bottom" aria-hidden="true" />
+          <header className="welcome-header"><span>TGS</span><span>Una experiencia inmersiva</span></header>
           <section className="welcome-content" aria-label="Bienvenida a TGS">
-            <div className="logo-float"><div className="logo-scene">
+            <div className="welcome-visual">
+              <div className="welcome-orbit welcome-orbit--one" aria-hidden="true" />
+              <div className="welcome-orbit welcome-orbit--two" aria-hidden="true" />
+              <div className="welcome-orbit welcome-orbit--three" aria-hidden="true" />
+              <span className="welcome-coordinate" aria-hidden="true">ENERGÍA EN MOVIMIENTO</span>
+              <div className="logo-float"><div className="logo-scene">
               <div className="logo-halo" aria-hidden="true" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="brand-logo" src={publicAsset("/brand/tgs-logo-color.svg")} alt="TGS"
                 width="500" height="185" draggable="false" />
-            </div></div>
-            <div className="experience-choice" aria-label="Experiencia disponible">
-              <div className="experience-choice__option experience-choice__option--selected">
-                <span className="experience-choice__icon" aria-hidden="true">✦</span>
-                <span><strong>Zoom libre</strong><small>Elegí la dirección y acercate para leer cada imagen</small></span>
+              </div></div>
+            </div>
+            <div className="welcome-copy">
+              <p className="welcome-kicker"><span /> Conectá con nuestra historia</p>
+              <h1>Una historia<br />que nos <em>mueve.</em></h1>
+              <p className="welcome-description">Un viaje por los momentos que nos trajeron hasta acá. Y la energía que nos lleva hacia adelante.</p>
+              <button className="start-button" type="button" onClick={startExperience}
+                disabled={!readyToStart} aria-busy={!readyToStart}>
+                <span>{readyToStart ? "Comenzar" : "Preparando…"}</span>
+                <span className="start-button__arrow" aria-hidden="true">↗</span>
+              </button>
+              <div className="welcome-instruction">
+                <span className="welcome-instruction__icon" aria-hidden="true">✦</span>
+                <span><strong>Zoom libre</strong><span className="touch-instruction">Pellizcá para acercarte. Arrastrá para explorar.</span><span className="desktop-instruction">Acercate con la rueda. Arrastrá para explorar.</span></span>
               </div>
             </div>
-            <button className="start-button" type="button" onClick={startExperience}
-              disabled={!readyToStart} aria-busy={!readyToStart}>
-              <span>{readyToStart ? "Comenzar" : "Preparando…"}</span>
-              <span className="start-button__arrow" aria-hidden="true">→</span>
-            </button>
           </section>
+          <footer className="welcome-footer"><span>Energía que nos conecta</span><span>Explorá a tu ritmo <span aria-hidden="true">↗</span></span></footer>
           <div className="bottom-glow" aria-hidden="true" />
         </main>
       ) : null}
@@ -1537,7 +1585,7 @@ export default function Home() {
         className={`zoom-experience${started ? " zoom-experience--active" : ""}${developerMode ? " zoom-experience--developer" : ""}${experienceMode === "manual" ? " zoom-experience--manual" : ""}`}
         role="slider" aria-label={experienceMode === "manual" ? "Experiencia de zoom libre" : "Experiencia de zoom guiado"} aria-valuemin={0}
         aria-valuemax={MAX_DEPTH * 100} aria-valuenow={Math.round(depth * 100)}
-        aria-hidden={!started} tabIndex={started ? 0 : -1}
+        aria-hidden={!started || Boolean(interlude)} inert={!started || Boolean(interlude)} tabIndex={started && !interlude ? 0 : -1}
         onPointerDown={handleZoomPointerDown} onPointerMove={handleZoomPointerMove}
         onPointerUp={handleZoomPointerEnd} onPointerCancel={handleZoomPointerEnd}
         onWheel={handleWheel} onKeyDown={handleZoomKeyDown}>
@@ -1752,6 +1800,8 @@ export default function Home() {
           </>
         ) : null}
       </div>
+      {interlude ? <ExperienceInterlude key={interlude} kind={interlude}
+        onContinue={continueExperience} onRestart={restartExperience} /> : null}
       {sharedMasks.pending || sharedMasks.loadError ? (
         <div className="mask-update-notice" role="status">
           <span>{sharedMasks.pending ? "Hay una nueva versión de las máscaras." : sharedMasks.loadError}</span>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./experience.css";
 import scenes from "./scenes.json";
 import { startupSource } from "./scene-loading.mjs";
 
