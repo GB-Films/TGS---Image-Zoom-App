@@ -1,0 +1,81 @@
+.ride-experience { position: fixed; inset: 0; isolation: isolate; overflow: hidden; background: #d9effb; color: #00336d; font-family: "Segoe UI", Arial, sans-serif; }
+.ride-world, .ride-world canvas, .ride-vignette { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ride-world canvas { display: block; }
+.ride-vignette { pointer-events: none; background: linear-gradient(180deg,transparent 65%,#103e7233 100%); }
+.ride-header { position: absolute; top: max(24px,env(safe-area-inset-top)); left: 32px; right: 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.ride-brand img { display: block; object-fit: contain; }
+.ride-header-actions { display: flex; align-items: center; gap: 10px; }
+.ride-header-actions a, .ride-header-actions button { display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 10px 17px; border: 1px solid #235b9130; border-radius: 30px; background: #f3f9ffb8; color: inherit; font-size: 12px; text-decoration: none; cursor: pointer; backdrop-filter: blur(12px); }
+.ride-timeline { position: absolute; top: 85px; left: 50%; transform: translateX(-50%); width: min(728px,80vw); }
+.ride-timeline-scroll { overflow-x: auto; scrollbar-width: none; padding: 10px 0 5px; overscroll-behavior-x: contain; border-radius: 8px; }
+.ride-timeline-scroll::-webkit-scrollbar { display: none; }
+.ride-timeline-scroll:focus-visible { outline: 2px solid #0078b8; outline-offset: 3px; }
+.ride-timeline-content { position: relative; width: calc(var(--ride-stop-count) * 104px); }
+.ride-timeline ol { position: relative; display: flex; list-style: none; margin: 0; padding: 0; }
+.ride-timeline li { position: relative; flex: 0 0 104px; width: 104px; text-align: center; color: #51799f; }
+.ride-timeline strong { display: block; margin-top: 10px; font-size: 12px; font-weight: 500; letter-spacing: 1px; }
+.ride-timeline small { display: block; margin: 3px 8px 0; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ride-timeline-dot { display: block; margin: 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #c6e3f5; border: 1px solid #5a9bc4; }
+.ride-timeline .is-current { color: #004289; }
+.ride-timeline .is-current strong { font-weight: 700; }
+.ride-timeline .is-current .ride-timeline-dot, .ride-timeline .is-visited .ride-timeline-dot { background: #0078b8; border-color: #0078b8; }
+.ride-timeline-line { position: absolute; top: 3px; left: 52px; width: calc(100% - 104px); height: 1px; background: #4e759c40; }
+.ride-timeline-line i { display: block; background: #0078b8; height: 2px; transition: width .12s linear; }
+.ride-timeline-line b { position: absolute; z-index: 2; top: -3px; width: 8px; height: 8px; transform: translateX(-50%); border: 2px solid #f0f8ff; box-shadow: 0 0 0 2px #0078b8; border-radius: 50%; background: #0078b8; transition: left .12s linear; }
+.ride-bottom { position: absolute; bottom: max(24px,env(safe-area-inset-bottom)); left: 32px; right: 32px; }
+.ride-stop-card { margin-left: auto; width: min(820px,100%); display: flex; align-items: center; gap: 20px; padding: 20px 23px; border-radius: 18px; background: #f4f9fff2; border: 1px solid #ffffffb3; box-shadow: 0 12px 40px #00336d14; backdrop-filter: blur(18px); }
+.ride-stop-index { font-size: 32px; font-weight: 300; line-height: 1; padding-right: 18px; border-right: 1px solid #235b9126; font-variant-numeric: tabular-nums; }
+.ride-stop-copy { flex: 1; min-width: 0; }
+.ride-stop-copy > span { font-size: 11px; letter-spacing: 1.2px; font-weight: 600; color: #4c85b0; }
+.ride-stop-copy h2 { font-size: 21px; margin: 5px 0 0; font-weight: 500; letter-spacing: -.5px; line-height: 1.2; }
+.ride-card-actions { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+.ride-primary, .ride-image-button { min-height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 9px; padding: 0 17px; font-size: 12px; cursor: pointer; transition: background .2s; }
+.ride-primary { gap: 22px; background: #004289; color: #fff; border: 2px solid #004289; }
+.ride-primary:hover { background: #00336d; border-color: #00336d; }
+.ride-image-button { gap: 9px; border: 2px solid #004289; background: #e3f2ff; color: #004289; font-weight: 600; }
+.ride-image-button:hover { background: #cce8ff; }
+.ride-primary > span, .ride-image-button > span { font-size: 19px; }
+.ride-primary:disabled, .ride-image-button:disabled { opacity: .5; cursor: wait; }
+.ride-error { position: absolute; inset: 35% 20% auto; padding: 25px; border-radius: 14px; background: #fff; text-align: center; }
+.ride-error button { padding: 10px 20px; cursor: pointer; }
+.ride-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ride-experience button:focus-visible, .ride-experience a:focus-visible { outline: 3px solid #1da1b5; outline-offset: 4px; }
+.ride-eyebrow { font-size: 10px; letter-spacing: 2px; font-weight: 600; }
+.ride-artwork-dialog { width: min(1000px,95vw); max-height: 94dvh; padding: 25px; border: 1px solid #fff; border-radius: 20px; background: #f1f7fd; color: #00336d; box-shadow: 0 25px 100px #102c3955; }
+.ride-artwork-dialog::backdrop { background: #102d54c9; backdrop-filter: blur(12px); }
+.ride-artwork-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.ride-artwork-heading h2 { font-size: 22px; margin: 6px 0 15px; font-weight: 500; }
+.ride-artwork-heading button { flex-shrink: 0; border: 1px solid #235b9126; background: white; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; }
+.ride-artwork-dialog > img { width: 100%; height: min(65dvh,680px); object-fit: contain; display: block; }
+.ride-artwork-dialog > p { font-size: 12px; text-align: center; margin: 15px 0 0; }
+@media (max-width: 900px) {
+  .ride-header { left: 24px; right: 24px; }
+  .ride-bottom { left: 24px; right: 24px; }
+  .ride-stop-card { gap: 16px; padding: 18px; }
+  .ride-stop-copy h2 { font-size: 19px; }
+}
+@media (max-width: 600px) {
+  .ride-header { left: 18px; right: 18px; top: max(18px,env(safe-area-inset-top)); }
+  .ride-brand img { width: 74px; height: 38px; }
+  .ride-header-actions { gap: 7px; }
+  .ride-header-actions a, .ride-header-actions button { padding: 9px 12px; gap: 8px; font-size: 11px; }
+  .ride-timeline { top: 78px; width: calc(100vw - 32px); }
+  .ride-timeline strong { font-size: 11px; }
+  .ride-timeline small { font-size: 8px; }
+  .ride-bottom { left: 14px; right: 14px; bottom: max(15px,env(safe-area-inset-bottom)); }
+  .ride-stop-card { gap: 15px; padding: 17px; flex-wrap: wrap; border-radius: 15px; }
+  .ride-stop-index { font-size: 30px; padding-right: 14px; }
+  .ride-stop-copy h2 { font-size: 20px; }
+  .ride-stop-copy > span { font-size: 10px; }
+  .ride-card-actions { width: 100%; }
+  .ride-card-actions > button { flex: 1; min-width: 0; min-height: 48px; padding: 0 10px; gap: 8px; }
+  .ride-card-actions .ride-primary { flex: 1.35; }
+  .ride-artwork-dialog { padding: 16px; }
+  .ride-eyebrow { font-size: 9px; letter-spacing: 1px; }
+}
+@media (max-height: 560px) and (min-width: 601px) {
+  .ride-header { top: 12px; }
+  .ride-timeline { top: 15px; width: 38vw; }
+  .ride-bottom { bottom: 12px; }
+  .ride-stop-card { padding: 12px 16px; }
+}

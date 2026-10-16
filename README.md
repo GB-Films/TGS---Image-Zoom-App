@@ -28,6 +28,16 @@ Ver [secuencia y revisión](docs/production-scenes.md) y [servicio compartido](d
 
 ## Desarrollo y pruebas
 
+### Recorrido 3D
+
+`/recorrido` abre una experiencia independiente en primera persona: carro sobre un gasoducto con curvas y elevaciones suaves. Comienza frente al logo en acuarela y sigue con las 26 imágenes completas de «Orden Final», incluida la portada y ambos cierres. Se conservan las versiones corregidas disponibles en producción. Los 27 carteles alternan derecha e izquierda, empezando por la derecha. Cada tramo dura 4 segundos de movimiento; «Siguiente parada» inicia cada viaje y la llegada frena automáticamente hasta la próxima acción. La línea de tiempo se desplaza para seguir la parada y el año. Se puede ampliar cada ilustración, pausar, continuar o reiniciar. Ocultar la pestaña pausa el viaje para evitar saltos al regresar.
+
+El paisaje, las estaciones y el carro son geometría de Three.js; se reutilizan las ilustraciones existentes y el logo en acuarela suministrado, sin generar imágenes, modelos o sonidos. Las estaciones quedan al costado del caño para poder seguir avanzando. El motor se carga únicamente al abrir esta ruta. Requiere WebGL. La portada ofrece «Recorrido 3D», además de la experiencia original de zoom. Se publica en `/TGS---Image-Zoom-App/recorrido/`; `npm run build` prepara también su índice de directorio para GitHub Pages. Para probar localmente: `npm run dev` y abrir `/recorrido/` en el puerto indicado por Vite.
+
+La dirección visual usa celeste y azul de TGS y carteles sobre dos postes grises, sin plataformas ni barandas. Las imágenes y sus marcos están ampliados un 15%; la comprobación de espacio libre contempla ese tamaño. Los soportes del caño aparecen cada seis uniones, la mitad de la densidad inicial. Cada marco se ajusta a la proporción de su imagen; los travesaños tienen el mismo espesor y un pequeño avance para evitar caras coplanares en las esquinas. Las ilustraciones conservan el color sRGB sin exposición ni niebla del mundo. Tres capas de montañas facetadas a ambos lados acompañan todo el trayecto. Las piezas repetidas del paisaje y del caño se dibujan con instancias. La interfaz conserva la línea de tiempo, el título y los controles de avance, imagen y reinicio; no muestra etiquetas de prototipo ni leyendas redundantes.
+
+Los recursos de este modo están separados en `public/ride`: 27 WebP opacos de hasta 1600 px y vistas previas de 384 px, sin recortes ni ampliaciones artificiales. Se conservan las versiones pequeñas y solo tres texturas grandes cercanas al carro. Las precargas 4K pertenecen únicamente a la página de zoom. `node scripts/prepare-ride-images.mjs "RUTA/Trabajo de Imagenes"` prepara los derivados y su manifiesto `app/recorrido/ride-scenes.json`; el informe local de fuentes queda en `outputs/recorrido/image-sources.json`. Los originales y los recursos transparentes del zoom no se sustituyen.
+
 ```powershell
 npm ci
 npm run dev

@@ -22,7 +22,7 @@ import { useSharedMasks } from "./use-shared-masks";
 import type { MaskSettings } from "../shared/mask-settings.mjs";
 import { buildClosedPath, blurMaskAlpha, opaqueIntegral, opaqueRectangle, fitImageInsideMask } from "./mask-geometry.mjs";
 import { interpolateSpline, createZoomScaleMapping, cameraForPinch } from "./zoom-gesture.mjs";
-import { MOTION_IDLE_MS, sceneSourceForFrame, startupSceneSources, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
+import { MOTION_IDLE_MS, sceneSourceForFrame, startupSource, startupSceneSources, sceneLoadPlan, canReleaseScene } from "./scene-loading.mjs";
 
 export const dynamic = "force-static";
 
@@ -1542,6 +1542,7 @@ export default function Home() {
 
   return (
     <>
+      {productionScenes.slice(0, 4).map((scene, index) => <link key={scene.id} rel="preload" as="image" href={publicAsset(startupSource(scene.src, index))} type="image/webp" />)}
       {!started ? (
         <main ref={welcomeRef} className="welcome-screen"
           onPointerMove={handleWelcomePointerMove} onPointerLeave={resetWelcomeParallax}>
@@ -1570,6 +1571,9 @@ export default function Home() {
                 <span>{readyToStart ? "Comenzar" : "Preparando…"}</span>
                 <span className="start-button__arrow" aria-hidden="true">↗</span>
               </button>
+              <a className="ride-entry-link" href={publicAsset("/recorrido/")}>
+                <span>Recorrido 3D</span><span aria-hidden="true">→</span>
+              </a>
               <div className="welcome-instruction">
                 <span className="welcome-instruction__icon" aria-hidden="true">✦</span>
                 <span><strong>Zoom libre</strong><span className="touch-instruction">Pellizcá para acercarte. Arrastrá para explorar.</span><span className="desktop-instruction">Acercate con la rueda. Arrastrá para explorar.</span></span>

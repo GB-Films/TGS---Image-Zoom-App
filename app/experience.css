@@ -61,6 +61,11 @@
 .start-button__arrow { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #ffffff40; border-radius: 50%; font-size: 22px; }
 .start-button:disabled { cursor: wait; opacity: .65; }
 .start-button:focus-visible { outline: 3px solid #20b7d4; outline-offset: 5px; }
+.ride-entry-link { display: flex; align-items: center; justify-content: space-between; width: min(100%,290px); min-height: 48px; margin-top: 12px; padding: 10px 25px; border: 1px solid #91b7d0; border-radius: 999px; color: #004289; background: #ffffff8c; text-decoration: none; font-size: 14px; font-weight: 600; }
+.ride-entry-link:hover { background: #e1f2fc; }
+.ride-entry-link:focus-visible { outline: 3px solid #20b7d4; outline-offset: 4px; }
+@media (max-width: 700px) { .ride-entry-link { width: min(100%,300px); margin-left: auto; margin-right: auto; } }
+@media (max-height: 640px) { .ride-entry-link { min-height: 42px; margin-top: 8px; padding-top: 8px; padding-bottom: 8px; } }
 .welcome-instruction { display: flex; align-items: center; gap: 11px; margin-top: 25px; color: #58758d; font-size: 11px; line-height: 1.5; }
 .welcome-instruction > span:last-child { display: grid; gap: 2px; }
 .welcome-instruction strong { color: #285b81; font-weight: 650; }

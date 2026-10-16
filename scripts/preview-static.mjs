@@ -35,7 +35,8 @@ http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Esta vista previa es de solo lectura." })); return;
     }
     let relative = decodeURIComponent(url.pathname);
-    if (relative === "/") relative = "/index.html";
+    if (relative.endsWith("/")) relative += "index.html";
+    else if (!path.extname(relative)) relative += "/index.html";
     const file = path.resolve(root, "." + relative);
     if (!file.startsWith(root + path.sep)) { res.writeHead(403); res.end(); return; }
     const data = await fs.readFile(file);

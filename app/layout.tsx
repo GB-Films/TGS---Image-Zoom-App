@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./experience.css";
-import scenes from "./scenes.json";
-import { startupSource } from "./scene-loading.mjs";
 
 const PUBLIC_ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const publicAsset = (path: string) => `${PUBLIC_ASSET_BASE}${path}`;
@@ -42,9 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <head>
-        {scenes.slice(0, 4).map((scene, index) => <link key={scene.id} rel="preload" as="image" href={publicAsset(startupSource(scene.src, index))} type="image/webp" />)}
-      </head>
+      <head />
       <body>{children}</body>
     </html>
   );

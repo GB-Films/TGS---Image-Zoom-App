@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import scenes from "../app/scenes.json" with { type: "json" };
+import { startupSource } from "../app/scene-loading.mjs";
 
-async function render() {
+async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
@@ -25,6 +27,7 @@ test("server-renders the TGS welcome screen", async () => {
   assert.match(html, /Bienvenida a TGS/i);
   assert.match(html, /tgs-logo-color\.svg/i);
   assert.match(html, /Preparando…/i);
+  assert.ok(html.includes(`href="${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/recorrido/"`));
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/i);
 });
 
@@ -37,12 +40,24 @@ test("includes installable web app metadata and early image fetches", async () =
 
   assert.match(layout, /manifest:\s*publicAsset\("\/manifest\.webmanifest"\)/);
   assert.match(layout, /appleWebApp/);
-  assert.match(layout, /rel="preload"/);
-  assert.match(layout, /scenes.slice\(0, 4\)/);
-  assert.match(layout, /publicAsset\(startupSource\(scene.src, index\)\)/);
+  const html = await (await render()).text();
+  for (const [index, scene] of scenes.slice(0, 4).entries()) {
+    assert.ok(html.includes(`href="${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${startupSource(scene.src, index)}"`));
+  }
   assert.equal(webManifest.short_name, "TGS");
   assert.equal(webManifest.display, "standalone");
   assert.equal(webManifest.icons.length, 2);
+});
+
+test("the ride does not preload the zoom's 4K images", async () => {
+  const response = await render("/recorrido");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Ver imagen/);
+  assert.match(html, /\/ride\/tgs-00\.webp/);
+  assert.doesNotMatch(html, /(?:href|src)="[^"]*\/scenes\//);
+  const exported = await readFile(new URL("../dist/client/recorrido/index.html", import.meta.url), "utf8");
+  assert.match(exported, /Ver imagen/);
 });
 
 test("mounts a predecoded, continuous nested zoom sequence", async () => {
